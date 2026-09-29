@@ -52,6 +52,9 @@ class Modelo420 extends Controller
     /** @var bool */
     public bool $allowDelete = false;
 
+    /** @var bool */
+    public bool $allowUpdate = false;
+
     /** @var array */
     public array $auxRegiva = [];
 
@@ -103,6 +106,7 @@ class Modelo420 extends Controller
         parent::run();
 
         $this->allowDelete = (bool) $this->permissions->allowDelete;
+        $this->allowUpdate = (bool) $this->permissions->allowUpdate;
         $this->helper = new IGICHelper();
         $this->regiva = new RegularizacionImpuesto();
 
@@ -178,6 +182,31 @@ class Modelo420 extends Controller
             0,
             50
         );
+    }
+
+    /**
+     * Declaración del Modelo 420 de una regularización, para mostrar su resultado en el listado.
+     */
+    public function declaracionDe(int $idregiva): ?DeclaracionIGIC
+    {
+        return RegularizacionIGIC::getDeclaracion($idregiva);
+    }
+
+    /**
+     * Indica si el trimestre de la regularización seleccionada todavía no ha terminado.
+     */
+    public function periodoAbierto(): bool
+    {
+        return $this->selectedRegiva !== null
+            && strtotime((string) $this->selectedRegiva->fechafin) >= strtotime(Tools::date());
+    }
+
+    /**
+     * Tipo de resultado (I, C) de un importe de la casilla 45.
+     */
+    public function tipoResultado(float $resultado): string
+    {
+        return (new CasillasModelo420($this->helper))->tipoResultado($resultado);
     }
 
     /**
@@ -315,6 +344,31 @@ class Modelo420 extends Controller
     }
 
     /**
+     * Recalcula la regularización seleccionada con las facturas actuales del período.
+     */
+    protected function actualizarRegiva(): void
+    {
+        if (false === $this->allowUpdate) {
+            Tools::log()->warning('not-allowed-modify');
+            return;
+        }
+
+        $eje = $this->getEjercicioByFecha((string) $this->selectedRegiva->fechainicio);
+        if (null === $eje) {
+            Tools::log()->error('ejercicio-cerrado');
+            return;
+        }
+
+        $regiva = (new RegularizacionIGIC($this->helper))->actualizar($this->selectedRegiva, $eje);
+        if (null === $regiva) {
+            return;
+        }
+
+        Tools::log()->notice('regularizacion-actualizada');
+        $this->loadRegiva((int) $regiva->idregiva);
+    }
+
+    /**
      * Calcula la previsualización del asiento de regularización.
      */
     protected function completarRegiva(): void
@@ -418,13 +472,15 @@ class Modelo420 extends Controller
             return true;
         }
 
-        $acciones = ['guardar', 'eliminar', 'marcar-presentado', 'crear-rectificativo', 'descargar-atc'];
+        $acciones = ['guardar', 'actualizar', 'eliminar', 'marcar-presentado', 'crear-rectificativo', 'descargar-atc'];
         if (false === in_array($action, $acciones, true) || false === $this->validateFormToken()) {
             return true;
         }
 
         if ($action === 'guardar') {
             $this->guardarRegiva();
+        } elseif ($action === 'actualizar' && $this->selectedRegiva) {
+            $this->actualizarRegiva();
         } elseif ($action === 'eliminar' && $this->selectedRegiva) {
             $this->eliminarRegiva();
         } elseif ($action === 'marcar-presentado' && $this->declaracion) {
