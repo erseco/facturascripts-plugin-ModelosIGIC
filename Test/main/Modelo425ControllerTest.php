@@ -12,6 +12,7 @@
 
 namespace FacturaScripts\Test\Plugins;
 
+use FacturaScripts\Core\Tools;
 use FacturaScripts\Core\Where;
 use FacturaScripts\Plugins\ModelosIGIC\Controller\EditDeclaracionIGIC;
 use FacturaScripts\Plugins\ModelosIGIC\Controller\ListDeclaracionIGIC;
@@ -60,6 +61,17 @@ final class Modelo425ControllerTest extends TestCase
         $this->assertNotEmpty($controller->allEjercicios());
         $this->assertStringContainsString('formEjercicio', $html);
 
+        // casillas del resumen anual y plazo de presentación (Decreto 268/2011, art. 57.8)
+        $casillas = $controller->casillas()['casillas'];
+        $this->assertEqualsWithDelta(2000.0, $casillas['74']['importe'], 0.001);
+        $this->assertEqualsWithDelta(84.0, $casillas['95']['importe'], 0.001);
+        $this->assertEqualsWithDelta(42.0, $casillas['116']['importe'], 0.001);
+        $this->assertSame(['desde' => '2091-01-01', 'hasta' => '2091-01-31'], $controller->plazo());
+        $this->assertSame([], $controller->excluidasVentas());
+        $this->assertSame([], $controller->excluidasCompras());
+        $this->assertStringContainsString(Tools::lang()->trans('casilla-425-74'), $html);
+        $this->assertStringContainsString('31-01-2091', $html);
+
         // guardar el 425
         $this->request([
             'codejercicio' => $codejercicio, 'proceso' => 'guardar', 'multireqtoken' => $this->formToken(),
@@ -99,6 +111,10 @@ final class Modelo425ControllerTest extends TestCase
         $this->assertSame([], $controller->getFacturasClienteModelo());
         $this->assertSame([], $controller->getFacturasProveedorModelo());
         $this->assertSame(0.0, $controller->resultado());
+        $this->assertSame([], $controller->casillas());
+        $this->assertSame([], $controller->plazo());
+        $this->assertSame([], $controller->excluidasVentas());
+        $this->assertSame([], $controller->excluidasCompras());
     }
 
     public function testEjercicioPorDefecto(): void

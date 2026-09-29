@@ -29,11 +29,18 @@ ModelosIGIC añade a FacturaScripts el **Modelo 420** (autoliquidación trimestr
 ## Modelo 420 (trimestral)
 
 1. Ve a **Informes → Modelo 420** y pulsa **Nueva regularización**.
-2. Elige el **trimestre** (las fechas se rellenan solas y puedes ajustarlas) y pulsa
+2. Elige el **trimestre** y el **ejercicio** (las fechas son siempre las del trimestre natural) y pulsa
    **Calcular**. Verás la previsualización del asiento de regularización.
 3. Pulsa **Guardar**. Se crea la regularización, el asiento contable y la declaración en estado
-   *borrador* con las facturas incluidas. Al abrir la regularización verás el IGIC devengado y
-   el deducible por tipo impositivo, el resultado y las partidas del asiento.
+   *borrador* con las facturas incluidas. Al abrir la regularización verás las casillas del
+   modelo, el resultado (casilla 45), el plazo de presentación y las partidas del asiento.
+
+   Cada casilla indica si el plugin la **calcula**, si es **parcial** (una suma oficial en la que
+   intervienen casillas que el plugin no calcula) o si **no la calcula**. Estas últimas (bienes de
+   inversión, importaciones, prorrata, regímenes especiales, compensaciones de períodos
+   anteriores...) hay que revisarlas y completarlas en el programa de ayuda de la ATC. Las líneas
+   de factura que no son de IGIC o tienen una causa de exención se muestran aparte para que las
+   revises. Las fuentes de cada regla están en `doc/NORMATIVA.md` del repositorio.
 
    El plugin no deja guardar si hay facturas del período sin asiento contable, si ya existe una
    regularización que se solapa con esas fechas o si faltan las subcuentas especiales de
@@ -60,7 +67,9 @@ con las mismas facturas, que puedes revisar antes de presentar.
 ## Modelo 425 (anual)
 
 1. Ve a **Informes → Modelo 425** y elige el **ejercicio**.
-2. Revisa el resumen anual del IGIC devengado y deducible.
+2. Revisa las casillas del resumen anual: las que salen de las facturas del ejercicio, la casilla
+   116 (ingresos de los modelos 420 registrados en el plugin) y las que hay que completar en el
+   programa de ayuda de la ATC. El 425 se presenta junto con el 420 del cuarto trimestre.
 3. Pulsa **Guardar** para registrar la declaración y **Marcar como presentado** cuando la presentes.
 
 ---

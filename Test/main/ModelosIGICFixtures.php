@@ -24,6 +24,7 @@ use FacturaScripts\Core\Base\ControllerPermissions;
 use FacturaScripts\Core\DataSrc\Empresas;
 use FacturaScripts\Core\Lib\Accounting\AccountingPlanImport;
 use FacturaScripts\Core\Lib\Calculator;
+use FacturaScripts\Core\Lib\OperacionIVA;
 use FacturaScripts\Core\Response;
 use FacturaScripts\Core\Template\Controller as TemplateController;
 use FacturaScripts\Core\Tools;
@@ -245,16 +246,21 @@ trait ModelosIGICFixtures
         return 'IGIC';
     }
 
-    private function impuesto(float $tipo): Impuesto
+    /**
+     * Impuesto de IGIC (operación ES_03) del tipo indicado; lo crea si no existe.
+     */
+    protected function impuesto(float $tipo, string $operacion = OperacionIVA::ES_OPERATION_03): Impuesto
     {
-        foreach (Impuesto::all([Where::eq('iva', $tipo)]) as $impuesto) {
+        foreach (Impuesto::all([Where::eq('iva', $tipo), Where::eq('operacion', $operacion)]) as $impuesto) {
             return $impuesto;
         }
 
         $impuesto = new Impuesto();
-        $impuesto->codimpuesto = 'TIGIC' . (int) $tipo;
-        $impuesto->descripcion = 'IGIC ' . $tipo . '%';
+        $impuesto->codimpuesto = ($operacion === OperacionIVA::ES_OPERATION_03 ? 'TIGIC' : 'TIVA')
+            . str_replace('.', '_', (string) $tipo);
+        $impuesto->descripcion = ($operacion === OperacionIVA::ES_OPERATION_03 ? 'IGIC ' : 'IVA ') . $tipo . '%';
         $impuesto->iva = $tipo;
+        $impuesto->operacion = $operacion;
         $this->assertTrue($impuesto->save());
         $this->fixtures[] = $impuesto;
 
@@ -309,7 +315,46 @@ trait ModelosIGICFixtures
      */
     private function saveFactura($factura, string $fecha, float $base, float $tipo)
     {
+        return $this->saveFacturaLineas($factura, $fecha, [['base' => $base, 'tipo' => $tipo]]);
+    }
+
+    /**
+     * Crea una factura de venta con varias líneas.
+     *
+     * Cada línea admite: base, tipo, operacion (IGIC por defecto), excepcioniva, suplido y recargo.
+     */
+    protected function makeFacturaClienteLineas(
+        string $fecha,
+        array $lineas,
+        ?string $fechadevengo = null
+    ): FacturaCliente {
+        $factura = new FacturaCliente();
+        $factura->setSubject($this->makeCliente());
+
+        return $this->saveFacturaLineas($factura, $fecha, $lineas, $fechadevengo);
+    }
+
+    /**
+     * Crea una factura de compra con varias líneas (ver makeFacturaClienteLineas()).
+     */
+    protected function makeFacturaProveedorLineas(
+        string $fecha,
+        array $lineas,
+        ?string $fechadevengo = null
+    ): FacturaProveedor {
+        $factura = new FacturaProveedor();
+        $factura->setSubject($this->makeProveedor());
+
+        return $this->saveFacturaLineas($factura, $fecha, $lineas, $fechadevengo);
+    }
+
+    /**
+     * @param FacturaCliente|FacturaProveedor $factura
+     */
+    private function saveFacturaLineas($factura, string $fecha, array $lineas, ?string $fechadevengo = null)
+    {
         $factura->fecha = $fecha;
+        $factura->fechadevengo = $fechadevengo;
         $factura->codalmacen = $this->codalmacen();
 
         // las instalaciones mínimas de CI no tienen serie, forma de pago ni divisa por defecto
@@ -318,15 +363,24 @@ trait ModelosIGICFixtures
         $factura->coddivisa = $factura->coddivisa ?: $this->coddivisa();
         $this->assertTrue($factura->save(), $this->recentLog());
 
-        $impuesto = $this->impuesto($tipo);
-        $linea = $factura->getNewLine();
-        $linea->descripcion = 'Servicio de pruebas';
-        $linea->cantidad = 1;
-        $linea->pvpunitario = $base;
-        $linea->codimpuesto = $impuesto->codimpuesto;
-        $linea->iva = $impuesto->iva;
-        $lineas = [$linea];
-        $this->assertTrue(Calculator::calculate($factura, $lineas, true), $this->recentLog());
+        $nuevas = [];
+        foreach ($lineas as $datos) {
+            $impuesto = $this->impuesto(
+                (float) $datos['tipo'],
+                $datos['operacion'] ?? OperacionIVA::ES_OPERATION_03
+            );
+            $linea = $factura->getNewLine();
+            $linea->descripcion = 'Servicio de pruebas';
+            $linea->cantidad = 1;
+            $linea->pvpunitario = (float) $datos['base'];
+            $linea->codimpuesto = $impuesto->codimpuesto;
+            $linea->iva = $impuesto->iva;
+            $linea->recargo = (float) ($datos['recargo'] ?? 0.0);
+            $linea->suplido = (bool) ($datos['suplido'] ?? false);
+            $linea->excepcioniva = $datos['excepcioniva'] ?? null;
+            $nuevas[] = $linea;
+        }
+        $this->assertTrue(Calculator::calculate($factura, $nuevas, true), $this->recentLog());
         $this->assertNotEmpty($factura->idasiento, 'La factura no tiene asiento: ' . $this->recentLog());
         $this->fixtures[] = $factura;
 
