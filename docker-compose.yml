@@ -39,9 +39,7 @@ services:
     volumes:
       - facturascripts_data:/var/www/html/volume
       # Mount the plugin directory
-      - ./:/var/www/html/Plugins/Modelos420_425_Canarias
-      # Mount test fixtures for PHPUnit tests
-      - ./Test/fixtures:/var/www/html/Test/fixtures
+      - ./:/var/www/html/Plugins/ModelosIGIC
     depends_on:
       mariadb:
         condition: service_healthy

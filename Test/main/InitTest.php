@@ -1,19 +1,19 @@
 <?php
 
 /**
- * This file is part of Modelos420_425_Canarias plugin for FacturaScripts.
+ * This file is part of ModelosIGIC plugin for FacturaScripts.
  * Copyright (C) 2026 Ernesto Serrano <info@ernesto.es>
  *
  * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Lesser General Public License as
+ * it under the terms of the GNU Affero General Public License as
  * published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
  */
 
-namespace FacturaScripts\Test\Plugins\Modelos420_425_Canarias;
+namespace FacturaScripts\Test\Plugins\ModelosIGIC;
 
 use FacturaScripts\Core\Template\InitClass;
-use FacturaScripts\Plugins\Modelos420_425_Canarias\Init;
+use FacturaScripts\Plugins\ModelosIGIC\Init;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
 
@@ -49,7 +49,7 @@ class InitTest extends TestCase
     public function testCorrectNamespace(): void
     {
         $this->assertEquals(
-            'FacturaScripts\\Plugins\\Modelos420_425_Canarias',
+            'FacturaScripts\\Plugins\\ModelosIGIC',
             $this->reflection->getNamespaceName(),
             'Init should be in correct namespace'
         );
@@ -148,7 +148,7 @@ class InitTest extends TestCase
     public function testModelo420ControllerExists(): void
     {
         $this->assertTrue(
-            class_exists('FacturaScripts\\Plugins\\Modelos420_425_Canarias\\Controller\\Modelo420'),
+            class_exists('FacturaScripts\\Plugins\\ModelosIGIC\\Controller\\Modelo420'),
             'Modelo420 controller should exist'
         );
     }
@@ -156,7 +156,7 @@ class InitTest extends TestCase
     public function testModelo425ControllerExists(): void
     {
         $this->assertTrue(
-            class_exists('FacturaScripts\\Plugins\\Modelos420_425_Canarias\\Controller\\Modelo425'),
+            class_exists('FacturaScripts\\Plugins\\ModelosIGIC\\Controller\\Modelo425'),
             'Modelo425 controller should exist'
         );
     }
@@ -168,7 +168,7 @@ class InitTest extends TestCase
     public function testIGICHelperExists(): void
     {
         $this->assertTrue(
-            class_exists('FacturaScripts\\Plugins\\Modelos420_425_Canarias\\Lib\\IGICHelper'),
+            class_exists('FacturaScripts\\Plugins\\ModelosIGIC\\Lib\\IGICHelper'),
             'IGICHelper class should exist'
         );
     }

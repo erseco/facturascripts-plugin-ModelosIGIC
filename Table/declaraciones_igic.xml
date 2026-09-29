@@ -69,15 +69,15 @@
         <type>timestamp</type>
     </column>
     <constraint>
-        <name>modelosfiscales_pkey</name>
+        <name>declaraciones_igic_pkey</name>
         <type>PRIMARY KEY (idmodelo)</type>
     </constraint>
     <constraint>
-        <name>ca_modelosfiscales_ejercicio</name>
+        <name>ca_declaraciones_igic_ejercicio</name>
         <type>FOREIGN KEY (codejercicio) REFERENCES ejercicios (codejercicio) ON DELETE CASCADE ON UPDATE CASCADE</type>
     </constraint>
     <constraint>
-        <name>ca_modelosfiscales_rectifica</name>
-        <type>FOREIGN KEY (idrectifica) REFERENCES modelosfiscales (idmodelo) ON DELETE SET NULL ON UPDATE CASCADE</type>
+        <name>ca_declaraciones_igic_rectifica</name>
+        <type>FOREIGN KEY (idrectifica) REFERENCES declaraciones_igic (idmodelo) ON DELETE SET NULL ON UPDATE CASCADE</type>
     </constraint>
 </table>

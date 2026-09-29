@@ -1,0 +1,84 @@
+{
+  "$schema": "./assets/blueprints/blueprint-schema.json",
+  "meta": {
+    "title": "ModelosIGIC Playground Demo",
+    "author": "erseco",
+    "description": "Prueba ModelosIGIC en FacturaScripts Playground con el plugin cargado desde este repositorio. Crea facturas de venta y de compra con IGIC y abre Informes > Modelo 420 para calcular el trimestre. Demo login: admin/admin."
+  },
+  "debug": {
+    "enabled": true
+  },
+  "landingPage": "/Modelo420",
+  "siteOptions": {
+    "title": "ModelosIGIC Playground Demo",
+    "locale": "es_ES",
+    "timezone": "Atlantic/Canary"
+  },
+  "login": {
+    "username": "admin",
+    "password": "admin"
+  },
+  "plugins": [
+    "https://github.com/erseco/facturascripts-plugin-ModelosIGIC/archive/refs/heads/main.zip"
+  ],
+  "install": {
+    "codpais": "ESP",
+    "empresa": "Pepita Gómez - Autónoma",
+    "cifnif": "125478938W",
+    "tipoidfiscal": "NIF",
+    "direccion": "Calle Triana 1",
+    "codpostal": "35002",
+    "ciudad": "Las Palmas de Gran Canaria",
+    "provincia": "Las Palmas",
+    "regimeniva": "General",
+    "codimpuesto": "IGIC7",
+    "defaultplan": true
+  },
+  "seed": {
+    "customers": [
+      {
+        "nombre": "Cliente Demo",
+        "razonsocial": "Cliente Demo S.L.",
+        "cifnif": "B12345678",
+        "tipoidfiscal": "CIF",
+        "regimeniva": "General",
+        "email": "cliente@example.com",
+        "direccion": "Calle Castillo 10",
+        "codpostal": "38002",
+        "ciudad": "Santa Cruz de Tenerife",
+        "provincia": "Santa Cruz de Tenerife",
+        "codpais": "ESP",
+        "_unique": "cifnif"
+      }
+    ],
+    "suppliers": [
+      {
+        "nombre": "Proveedor Demo",
+        "razonsocial": "Proveedor Demo S.L.",
+        "cifnif": "B35556677",
+        "tipoidfiscal": "CIF",
+        "regimeniva": "General",
+        "ciudad": "Las Palmas de Gran Canaria",
+        "provincia": "Las Palmas",
+        "codpais": "ESP",
+        "_unique": "cifnif"
+      }
+    ],
+    "products": [
+      {
+        "referencia": "SERV-CONSUL",
+        "descripcion": "Consultoría",
+        "precio": 80.00,
+        "codimpuesto": "IGIC7",
+        "_unique": "referencia"
+      },
+      {
+        "referencia": "MAT-OFICINA",
+        "descripcion": "Material de oficina",
+        "precio": 25.00,
+        "codimpuesto": "IGIC7",
+        "_unique": "referencia"
+      }
+    ]
+  }
+}

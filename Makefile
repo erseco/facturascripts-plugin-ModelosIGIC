@@ -60,30 +60,35 @@ shell: check-docker
 clean: check-docker
 	docker compose down -v --remove-orphans
 
-# Generate the Modelos420_425_Canarias-N.zip package using git archive (N = integer version)
+# Generate the ModelosIGIC-X.X.X.zip package
 package:
 	@if [ -z "$(VERSION)" ]; then \
-		echo "Error: VERSION not specified. Use 'make package VERSION=2'"; \
-		exit 1; \
-	fi
-	@if ! echo "$(VERSION)" | grep -qE '^[0-9]+$$'; then \
-		echo "Error: VERSION must be an integer (e.g., 1, 2, 3). Got: $(VERSION)"; \
+		echo "Error: VERSION not specified. Use 'make package VERSION=1.2.3'"; \
 		exit 1; \
 	fi
 	@echo "Updating version to $(VERSION) in facturascripts.ini..."
 	$(SED_INPLACE) 's/^\(version[[:space:]]*=[[:space:]]*\).*$$/\1$(VERSION)/' facturascripts.ini
-	@echo "Creating ZIP archive: Modelos420_425_Canarias-$(VERSION).zip..."
+	@echo "Creating ZIP archive: ModelosIGIC-$(VERSION).zip..."
 	@mkdir -p dist
-	@git archive --format=zip --prefix=Modelos420_425_Canarias/ HEAD -o dist/Modelos420_425_Canarias-$(VERSION).zip
+	@zip -r dist/ModelosIGIC-$(VERSION).zip . \
+		-x "*.git*" \
+		-x "*examples/*" \
+		-x "*dist/*" \
+		-x "*vendor/*" \
+		-x "*node_modules/*" \
+		-x "*.DS_Store" \
+		-x "*Makefile" \
+		-x "*docker-compose.yml" \
+		-x "*.md"
 	@echo "Restoring version in facturascripts.ini..."
-	$(SED_INPLACE) 's/^\(version[[:space:]]*=[[:space:]]*\).*$$/\11/' facturascripts.ini
-	@echo "Package created: dist/Modelos420_425_Canarias-$(VERSION).zip"
+	$(SED_INPLACE) 's/^\(version[[:space:]]*=[[:space:]]*\).*$$/\11.0/' facturascripts.ini
+	@echo "Package created: dist/ModelosIGIC-$(VERSION).zip"
 
 # Enable the plugin in FacturaScripts
 enable-plugin: check-docker
-	@echo "Enabling Modelos420_425_Canarias plugin..."
+	@echo "Enabling ModelosIGIC plugin..."
 	@docker compose exec facturascripts sh -c "cd /var/www/html && php84 index.php"
-	@echo "Plugin enabled! Access FacturaScripts at http://localhost:8080"
+	@echo "Plugin enabled! Access FacturaScripts at http://localhost:8081"
 	@echo "Login with admin/admin"
 
 # Rebuild FacturaScripts dynamic classes
@@ -97,7 +102,7 @@ lint: check-docker upd
 	@echo "Running PHP CodeSniffer..."
 	@echo ""
 	@docker compose exec facturascripts sh -c 'cd /var/www/html && echo "→ Installing phpcs if needed..." && if [ ! -f vendor/bin/phpcs ]; then php84 /usr/local/bin/composer require --dev squizlabs/php_codesniffer --no-interaction; fi'
-	@docker compose exec facturascripts sh -c 'cd /var/www/html/Plugins/Modelos420_425_Canarias && php84 /var/www/html/vendor/bin/phpcs --colors'
+	@docker compose exec facturascripts sh -c 'cd /var/www/html && php84 vendor/bin/phpcs --standard=Plugins/ModelosIGIC/phpcs.xml Plugins/ModelosIGIC --colors'
 	@echo ""
 	@echo "✅ Lint check completed!"
 
@@ -106,7 +111,7 @@ format: check-docker upd
 	@echo "Running PHP CS Fixer..."
 	@echo ""
 	@docker compose exec facturascripts sh -c 'cd /var/www/html && echo "→ Installing php-cs-fixer if needed..." && if [ ! -f vendor/bin/php-cs-fixer ]; then php84 /usr/local/bin/composer require --dev friendsofphp/php-cs-fixer --no-interaction; fi'
-	@docker compose exec facturascripts sh -c 'cd /var/www/html/Plugins/Modelos420_425_Canarias && php84 /var/www/html/vendor/bin/php-cs-fixer fix --config=.php-cs-fixer.php --verbose'
+	@docker compose exec facturascripts sh -c 'cd /var/www/html/Plugins/ModelosIGIC && php84 /var/www/html/vendor/bin/php-cs-fixer fix --config=.php-cs-fixer.php --verbose'
 	@echo ""
 	@echo "✅ Code formatting completed!"
 
@@ -115,8 +120,7 @@ test: check-docker upd
 	@echo "Running unit tests..."
 	@echo ""
 	@docker compose exec facturascripts sh -c 'cd /var/www/html && echo "→ Installing PHPUnit if needed..." && if [ ! -f vendor/bin/phpunit ]; then php84 /usr/local/bin/composer require --dev phpunit/phpunit --no-interaction; fi'
-	@docker compose exec --user root facturascripts sh -c 'cd /var/www/html && chown -R nobody:nobody Test 2>/dev/null || true'
-	@docker compose exec facturascripts sh -c 'cd /var/www/html && echo "→ Setting up test environment..." && mkdir -p Test/Plugins && cp -r Plugins/Modelos420_425_Canarias/Test/main/* Test/Plugins/ 2>/dev/null || true && cp Plugins/Modelos420_425_Canarias/Test/bootstrap.php Test/bootstrap.php 2>/dev/null || true && cp Plugins/Modelos420_425_Canarias/Test/install-plugins.php Test/install-plugins.php 2>/dev/null || true'
+	@docker compose exec facturascripts sh -c 'cd /var/www/html && echo "→ Setting up test environment..." && mkdir -p Test/Plugins && cp -r Plugins/ModelosIGIC/Test/main/* Test/Plugins/ 2>/dev/null || true && cp Plugins/ModelosIGIC/Test/bootstrap.php Test/bootstrap.php 2>/dev/null || true && cp Plugins/ModelosIGIC/Test/install-plugins.php Test/install-plugins.php 2>/dev/null || true'
 	@docker compose exec facturascripts sh -c 'cd /var/www/html && test -f Test/Plugins/install-plugins.txt || (echo "❌ Error: No tests found in Test/main/" && exit 1)'
 	@docker compose exec facturascripts sh -c 'cd /var/www/html && echo "→ Installing test plugins..." && php84 Test/install-plugins.php'
 	@docker compose exec facturascripts sh -c 'cd /var/www/html && test -f phpunit-plugins.xml || echo "<?xml version=\"1.0\" encoding=\"UTF-8\"?><phpunit bootstrap=\"Test/bootstrap.php\" colors=\"true\"><testsuites><testsuite name=\"PluginTests\"><directory>Test/Plugins</directory></testsuite></testsuites></phpunit>" > phpunit-plugins.xml'
@@ -155,19 +159,19 @@ help:
 	@echo "  ps                - Show container status"
 	@echo ""
 	@echo "Code Quality:"
-	@echo "  lint              - Run PHP CodeSniffer to check code style (Docker)"
-	@echo "  format            - Run PHP CS Fixer to fix code style (Docker)"
+	@echo "  lint              - Run PHP CodeSniffer to check code style"
+	@echo "  format            - Run PHP CS Fixer to automatically fix code style"
 	@echo ""
 	@echo "Testing:"
-	@echo "  test              - Run PHP unit tests inside container"
+	@echo "  test              - Run unit tests inside container"
 	@echo ""
 	@echo "Plugin management:"
 	@echo "  enable-plugin     - Enable the plugin in FacturaScripts"
 	@echo "  rebuild           - Rebuild FacturaScripts dynamic classes"
 	@echo ""
 	@echo "Packaging:"
-	@echo "  package           - Generate Modelos420_425_Canarias-VERSION.zip using git archive"
-	@echo "                      Usage: make package VERSION=2 (integer only)"
+	@echo "  package           - Generate a .zip package of the plugin with version tag"
+	@echo "                      Usage: make package VERSION=1.2.3"
 	@echo ""
 	@echo "Other:"
 	@echo "  help              - Show this help message"

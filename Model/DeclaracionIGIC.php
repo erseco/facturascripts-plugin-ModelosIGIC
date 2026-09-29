@@ -1,24 +1,24 @@
 <?php
 
 /**
- * This file is part of Modelos420_425_Canarias plugin for FacturaScripts.
+ * This file is part of ModelosIGIC plugin for FacturaScripts.
  * Copyright (C) 2026 Ernesto Serrano <info@ernesto.es>
  *
  * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Lesser General Public License as
+ * it under the terms of the GNU Affero General Public License as
  * published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Lesser General Public License for more details.
+ * GNU Affero General Public License for more details.
  *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-namespace FacturaScripts\Plugins\Modelos420_425_Canarias\Model;
+namespace FacturaScripts\Plugins\ModelosIGIC\Model;
 
 use FacturaScripts\Core\Model\Base\ModelClass;
 use FacturaScripts\Core\Model\Base\ModelTrait;
@@ -30,7 +30,7 @@ use FacturaScripts\Core\Tools;
  * Esta tabla permite hacer seguimiento de los modelos presentados,
  * las facturas incluidas en cada uno, y crear modelos rectificativos.
  */
-class ModeloFiscal extends ModelClass
+class DeclaracionIGIC extends ModelClass
 {
     use ModelTrait;
 
@@ -100,17 +100,17 @@ class ModeloFiscal extends ModelClass
 
     public static function tableName(): string
     {
-        return 'modelosfiscales';
+        return 'declaraciones_igic';
     }
 
     /**
      * Obtiene las facturas incluidas en este modelo.
      *
-     * @return ModeloFiscalFactura[]
+     * @return DeclaracionIGICFactura[]
      */
     public function getFacturas(): array
     {
-        $factura = new ModeloFiscalFactura();
+        $factura = new DeclaracionIGICFactura();
         return $factura->all([
             new \FacturaScripts\Core\Base\DataBase\DataBaseWhere('idmodelo', $this->idmodelo),
         ]);
@@ -119,11 +119,11 @@ class ModeloFiscal extends ModelClass
     /**
      * Obtiene las facturas de cliente incluidas en este modelo.
      *
-     * @return ModeloFiscalFactura[]
+     * @return DeclaracionIGICFactura[]
      */
     public function getFacturasCliente(): array
     {
-        $factura = new ModeloFiscalFactura();
+        $factura = new DeclaracionIGICFactura();
         return $factura->all([
             new \FacturaScripts\Core\Base\DataBase\DataBaseWhere('idmodelo', $this->idmodelo),
             new \FacturaScripts\Core\Base\DataBase\DataBaseWhere('tipofactura', 'cliente'),
@@ -133,11 +133,11 @@ class ModeloFiscal extends ModelClass
     /**
      * Obtiene las facturas de proveedor incluidas en este modelo.
      *
-     * @return ModeloFiscalFactura[]
+     * @return DeclaracionIGICFactura[]
      */
     public function getFacturasProveedor(): array
     {
-        $factura = new ModeloFiscalFactura();
+        $factura = new DeclaracionIGICFactura();
         return $factura->all([
             new \FacturaScripts\Core\Base\DataBase\DataBaseWhere('idmodelo', $this->idmodelo),
             new \FacturaScripts\Core\Base\DataBase\DataBaseWhere('tipofactura', 'proveedor'),
@@ -244,7 +244,7 @@ class ModeloFiscal extends ModelClass
         if ($nuevo->save()) {
             // Copiar las facturas al nuevo modelo
             foreach ($this->getFacturas() as $factura) {
-                $nuevaFactura = new ModeloFiscalFactura();
+                $nuevaFactura = new DeclaracionIGICFactura();
                 $nuevaFactura->idmodelo = $nuevo->idmodelo;
                 $nuevaFactura->tipofactura = $factura->tipofactura;
                 $nuevaFactura->idfactura = $factura->idfactura;
@@ -290,7 +290,7 @@ class ModeloFiscal extends ModelClass
         return parent::test();
     }
 
-    public function url(string $type = 'auto', string $list = 'ListModeloFiscal'): string
+    public function url(string $type = 'auto', string $list = 'ListDeclaracionIGIC'): string
     {
         return parent::url($type, $list);
     }

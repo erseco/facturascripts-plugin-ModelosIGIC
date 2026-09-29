@@ -1,6 +1,8 @@
 # Export ignore - these files will not be included in git archive or releases
 # Development and testing files
 /.aider*                export-ignore
+/.claude/               export-ignore
+/.omc/                  export-ignore
 /.DS_Store              export-ignore
 /.editorconfig          export-ignore
 /.env                   export-ignore
@@ -12,12 +14,17 @@
 /tests/                 export-ignore
 
 # Documentation and examples
-/CLAUDE.md              export-ignore
-/doc/                   export-ignore
 /examples/              export-ignore
+/QUICKSTART.md          export-ignore
+/README.md              export-ignore
 
-# Reference repository (cloned for development)
-/facturascripts/        export-ignore
+# Agent / AI instruction files
+/AGENTS.md              export-ignore
+/CLAUDE.md              export-ignore
+/GEMINI.md              export-ignore
+
+# Playground demo (not needed at runtime)
+/blueprint.json         export-ignore
 
 # Build and dependencies
 /vendor/                export-ignore
@@ -25,9 +32,10 @@
 /dist/                  export-ignore
 /composer.json          export-ignore
 /composer.lock          export-ignore
+/package.json           export-ignore
+/package-lock.json      export-ignore
 
 # Development tools
-/biome.json             export-ignore
 /docker-compose.yml     export-ignore
 /Makefile               export-ignore
 /phpunit.xml            export-ignore
@@ -36,6 +44,9 @@
 /phpcs.xml              export-ignore
 /.php-cs-fixer.php      export-ignore
 /.php-cs-fixer.cache    export-ignore
+/phpunit-coverage.xml export-ignore
+/codecov.yml export-ignore
+/coverage.xml export-ignore
 
-# Translation utilities
-/Translation/updater.php export-ignore
+# Normative reference documents (PDFs, NORMATIVA.md)
+/doc/                   export-ignore

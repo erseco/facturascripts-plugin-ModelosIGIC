@@ -1,25 +1,25 @@
 <?php
 
 /**
- * This file is part of Modelos420_425_Canarias plugin for FacturaScripts.
+ * This file is part of ModelosIGIC plugin for FacturaScripts.
  * Copyright (C) 2016-2026 Carlos Garcia Gomez <neorazorx@gmail.com>
  * Copyright (C) 2026 Ernesto Serrano <info@ernesto.es>
  *
  * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Lesser General Public License as
+ * it under the terms of the GNU Affero General Public License as
  * published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Lesser General Public License for more details.
+ * GNU Affero General Public License for more details.
  *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-namespace FacturaScripts\Plugins\Modelos420_425_Canarias\Controller;
+namespace FacturaScripts\Plugins\ModelosIGIC\Controller;
 
 use FacturaScripts\Core\Base\DataBase\DataBaseWhere;
 use FacturaScripts\Core\Template\Controller;
@@ -27,9 +27,9 @@ use FacturaScripts\Core\Tools;
 use FacturaScripts\Dinamic\Model\Ejercicio;
 use FacturaScripts\Dinamic\Model\FacturaCliente;
 use FacturaScripts\Dinamic\Model\FacturaProveedor;
-use FacturaScripts\Plugins\Modelos420_425_Canarias\Lib\IGICHelper;
-use FacturaScripts\Plugins\Modelos420_425_Canarias\Model\ModeloFiscal;
-use FacturaScripts\Plugins\Modelos420_425_Canarias\Model\ModeloFiscalFactura;
+use FacturaScripts\Plugins\ModelosIGIC\Lib\IGICHelper;
+use FacturaScripts\Plugins\ModelosIGIC\Model\DeclaracionIGIC;
+use FacturaScripts\Plugins\ModelosIGIC\Model\DeclaracionIGICFactura;
 
 /**
  * Controlador para el Modelo 425 - Declaración-resumen anual del IGIC.
@@ -62,8 +62,8 @@ class Modelo425 extends Controller
     /** @var array */
     private array $desgloseVentas = [];
 
-    /** @var ?ModeloFiscal */
-    public ?ModeloFiscal $modeloFiscal = null;
+    /** @var ?DeclaracionIGIC */
+    public ?DeclaracionIGIC $declaracion = null;
 
     public function getPageData(): array
     {
@@ -96,14 +96,14 @@ class Modelo425 extends Controller
 
         // Buscar modelo fiscal 425 existente para este ejercicio
         if ($this->selectedEjercicio) {
-            $this->modeloFiscal = $this->getModeloFiscalPorEjercicio($this->selectedEjercicio->codejercicio);
+            $this->declaracion = $this->getDeclaracionIGICPorEjercicio($this->selectedEjercicio->codejercicio);
         }
 
         // Procesar acciones
         $action = $this->request()->request->get('proceso', '');
         if ($action === 'guardar' && $this->selectedEjercicio) {
             $this->guardarModelo425();
-        } elseif ($action === 'marcar-presentado' && $this->modeloFiscal) {
+        } elseif ($action === 'marcar-presentado' && $this->declaracion) {
             $this->marcarPresentado();
         }
 
@@ -118,7 +118,7 @@ class Modelo425 extends Controller
         $numeroReferencia = $this->request()->request->get('numeroreferencia', '');
         $fechaPresentacion = $this->request()->request->get('fechapresentacion', date('Y-m-d'));
 
-        if ($this->modeloFiscal->marcarPresentado($numeroReferencia ?: null, $fechaPresentacion)) {
+        if ($this->declaracion->marcarPresentado($numeroReferencia ?: null, $fechaPresentacion)) {
             Tools::log()->notice('modelo-marcado-presentado');
         } else {
             Tools::log()->error('error-marcar-presentado');
@@ -215,12 +215,12 @@ class Modelo425 extends Controller
     protected function guardarModelo425(): void
     {
         // Verificar si ya existe un modelo 425 para este ejercicio
-        if ($this->modeloFiscal !== null) {
+        if ($this->declaracion !== null) {
             Tools::log()->warning('modelo-425-ya-existe');
             return;
         }
 
-        $modelo = new ModeloFiscal();
+        $modelo = new DeclaracionIGIC();
         $modelo->tipo = '425';
         $modelo->periodo = 'ANUAL';
         $modelo->codejercicio = $this->selectedEjercicio->codejercicio;
@@ -233,7 +233,7 @@ class Modelo425 extends Controller
 
         if ($modelo->save()) {
             $this->guardarFacturasModelo($modelo);
-            $this->modeloFiscal = $modelo;
+            $this->declaracion = $modelo;
             Tools::log()->notice('modelo-425-guardado');
         } else {
             Tools::log()->error('error-guardar-modelo-425');
@@ -243,7 +243,7 @@ class Modelo425 extends Controller
     /**
      * Guarda las facturas incluidas en el modelo fiscal.
      */
-    protected function guardarFacturasModelo(ModeloFiscal $modelo): void
+    protected function guardarFacturasModelo(DeclaracionIGIC $modelo): void
     {
         // Facturas de cliente (ventas - IGIC devengado)
         $facturaCliente = new FacturaCliente();
@@ -252,14 +252,14 @@ class Modelo425 extends Controller
             new DataBaseWhere('fecha', $modelo->fechafin, '<='),
         ];
         foreach ($facturaCliente->all($where) as $factura) {
-            $mf = ModeloFiscalFactura::fromFacturaCliente($factura, $modelo->idmodelo);
+            $mf = DeclaracionIGICFactura::fromFacturaCliente($factura, $modelo->idmodelo);
             $mf->save();
         }
 
         // Facturas de proveedor (compras - IGIC deducible)
         $facturaProveedor = new FacturaProveedor();
         foreach ($facturaProveedor->all($where) as $factura) {
-            $mf = ModeloFiscalFactura::fromFacturaProveedor($factura, $modelo->idmodelo);
+            $mf = DeclaracionIGICFactura::fromFacturaProveedor($factura, $modelo->idmodelo);
             $mf->save();
         }
     }
@@ -267,9 +267,9 @@ class Modelo425 extends Controller
     /**
      * Obtiene el modelo fiscal 425 para un ejercicio.
      */
-    protected function getModeloFiscalPorEjercicio(string $codejercicio): ?ModeloFiscal
+    protected function getDeclaracionIGICPorEjercicio(string $codejercicio): ?DeclaracionIGIC
     {
-        $modelo = new ModeloFiscal();
+        $modelo = new DeclaracionIGIC();
         $where = [
             new DataBaseWhere('tipo', '425'),
             new DataBaseWhere('codejercicio', $codejercicio),
@@ -283,7 +283,7 @@ class Modelo425 extends Controller
      */
     public function getFacturasClienteModelo(): array
     {
-        return $this->modeloFiscal ? $this->modeloFiscal->getFacturasCliente() : [];
+        return $this->declaracion ? $this->declaracion->getFacturasCliente() : [];
     }
 
     /**
@@ -291,7 +291,7 @@ class Modelo425 extends Controller
      */
     public function getFacturasProveedorModelo(): array
     {
-        return $this->modeloFiscal ? $this->modeloFiscal->getFacturasProveedor() : [];
+        return $this->declaracion ? $this->declaracion->getFacturasProveedor() : [];
     }
 
     /**
@@ -303,7 +303,7 @@ class Modelo425 extends Controller
             return [];
         }
 
-        $modelo = new ModeloFiscal();
+        $modelo = new DeclaracionIGIC();
         $where = [
             new DataBaseWhere('tipo', '420'),
             new DataBaseWhere('codejercicio', $this->selectedEjercicio->codejercicio),

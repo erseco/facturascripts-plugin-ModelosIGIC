@@ -1,25 +1,25 @@
 <?php
 
 /**
- * This file is part of Modelos420_425_Canarias plugin for FacturaScripts.
+ * This file is part of ModelosIGIC plugin for FacturaScripts.
  * Copyright (C) 2014-2026 Carlos Garcia Gomez <neorazorx@gmail.com>
  * Copyright (C) 2026 Ernesto Serrano <info@ernesto.es>
  *
  * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Lesser General Public License as
+ * it under the terms of the GNU Affero General Public License as
  * published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Lesser General Public License for more details.
+ * GNU Affero General Public License for more details.
  *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-namespace FacturaScripts\Plugins\Modelos420_425_Canarias\Controller;
+namespace FacturaScripts\Plugins\ModelosIGIC\Controller;
 
 use FacturaScripts\Core\Base\DataBase\DataBaseWhere;
 use FacturaScripts\Core\Template\Controller;
@@ -30,10 +30,10 @@ use FacturaScripts\Dinamic\Model\FacturaCliente;
 use FacturaScripts\Dinamic\Model\FacturaProveedor;
 use FacturaScripts\Dinamic\Model\Partida;
 use FacturaScripts\Dinamic\Model\RegularizacionImpuesto;
-use FacturaScripts\Plugins\Modelos420_425_Canarias\Lib\ATCFileGenerator;
-use FacturaScripts\Plugins\Modelos420_425_Canarias\Lib\IGICHelper;
-use FacturaScripts\Plugins\Modelos420_425_Canarias\Model\ModeloFiscal;
-use FacturaScripts\Plugins\Modelos420_425_Canarias\Model\ModeloFiscalFactura;
+use FacturaScripts\Plugins\ModelosIGIC\Lib\ATCFileGenerator;
+use FacturaScripts\Plugins\ModelosIGIC\Lib\IGICHelper;
+use FacturaScripts\Plugins\ModelosIGIC\Model\DeclaracionIGIC;
+use FacturaScripts\Plugins\ModelosIGIC\Model\DeclaracionIGICFactura;
 
 /**
  * Controlador para el Modelo 420 - Autoliquidación trimestral del IGIC.
@@ -82,8 +82,8 @@ class Modelo420 extends Controller
     /** @var array */
     private array $desgloseVentas = [];
 
-    /** @var ?ModeloFiscal */
-    public ?ModeloFiscal $modeloFiscal = null;
+    /** @var ?DeclaracionIGIC */
+    public ?DeclaracionIGIC $declaracion = null;
 
     public function getPageData(): array
     {
@@ -123,7 +123,7 @@ class Modelo420 extends Controller
             $this->selectedRegiva = $this->regiva->get($id);
             // Buscar modelo fiscal asociado
             if ($this->selectedRegiva) {
-                $this->modeloFiscal = $this->getModeloFiscalPorRegiva($this->selectedRegiva->idregiva);
+                $this->declaracion = $this->getDeclaracionIGICPorRegiva($this->selectedRegiva->idregiva);
             }
         }
 
@@ -133,15 +133,15 @@ class Modelo420 extends Controller
             $this->completarRegiva();
         } elseif ($action === 'guardar') {
             $this->guardarRegiva();
-        } elseif ($action === 'marcar-presentado' && $this->modeloFiscal) {
+        } elseif ($action === 'marcar-presentado' && $this->declaracion) {
             $this->marcarPresentado();
-        } elseif ($action === 'crear-rectificativo' && $this->modeloFiscal) {
+        } elseif ($action === 'crear-rectificativo' && $this->declaracion) {
             $this->crearRectificativo();
         }
 
         // Descargar fichero ATC
         $downloadATC = $this->request()->query->get('download-atc', '');
-        if ($downloadATC === '1' && $this->modeloFiscal) {
+        if ($downloadATC === '1' && $this->declaracion) {
             $this->descargarATC();
             return;
         }
@@ -379,7 +379,7 @@ class Modelo420 extends Controller
 
             if ($regiva->save()) {
                 // Guardar modelo fiscal y facturas
-                $this->guardarModeloFiscal($regiva, $eje->codejercicio, $periodo);
+                $this->guardarDeclaracionIGIC($regiva, $eje->codejercicio, $periodo);
                 Tools::log()->notice('regularizacion-guardada', ['%url%' => $regiva->url()]);
             } else {
                 $asiento->delete();
@@ -391,11 +391,14 @@ class Modelo420 extends Controller
     }
 
     /**
-     * Guarda el modelo fiscal y las facturas asociadas.
+     * Guarda la declaración IGIC y las facturas asociadas.
      */
-    protected function guardarModeloFiscal(RegularizacionImpuesto $regiva, string $codejercicio, string $periodo): void
-    {
-        $modelo = new ModeloFiscal();
+    protected function guardarDeclaracionIGIC(
+        RegularizacionImpuesto $regiva,
+        string $codejercicio,
+        string $periodo
+    ): void {
+        $modelo = new DeclaracionIGIC();
         $modelo->tipo = '420';
         $modelo->periodo = $periodo;
         $modelo->codejercicio = $codejercicio;
@@ -415,7 +418,7 @@ class Modelo420 extends Controller
     /**
      * Guarda las facturas incluidas en el modelo fiscal.
      */
-    protected function guardarFacturasModelo(ModeloFiscal $modelo): void
+    protected function guardarFacturasModelo(DeclaracionIGIC $modelo): void
     {
         // Facturas de cliente (ventas - IGIC devengado)
         $facturaCliente = new FacturaCliente();
@@ -424,14 +427,14 @@ class Modelo420 extends Controller
             new DataBaseWhere('fecha', $modelo->fechafin, '<='),
         ];
         foreach ($facturaCliente->all($where) as $factura) {
-            $mf = ModeloFiscalFactura::fromFacturaCliente($factura, $modelo->idmodelo);
+            $mf = DeclaracionIGICFactura::fromFacturaCliente($factura, $modelo->idmodelo);
             $mf->save();
         }
 
         // Facturas de proveedor (compras - IGIC deducible)
         $facturaProveedor = new FacturaProveedor();
         foreach ($facturaProveedor->all($where) as $factura) {
-            $mf = ModeloFiscalFactura::fromFacturaProveedor($factura, $modelo->idmodelo);
+            $mf = DeclaracionIGICFactura::fromFacturaProveedor($factura, $modelo->idmodelo);
             $mf->save();
         }
     }
@@ -439,9 +442,9 @@ class Modelo420 extends Controller
     /**
      * Obtiene el modelo fiscal asociado a una regularización.
      */
-    protected function getModeloFiscalPorRegiva(int $idregiva): ?ModeloFiscal
+    protected function getDeclaracionIGICPorRegiva(int $idregiva): ?DeclaracionIGIC
     {
-        $modelo = new ModeloFiscal();
+        $modelo = new DeclaracionIGIC();
         $where = [new DataBaseWhere('idregiva', $idregiva)];
         $modelos = $modelo->all($where, [], 0, 1);
         return empty($modelos) ? null : $modelos[0];
@@ -452,7 +455,7 @@ class Modelo420 extends Controller
      */
     public function getFacturasClienteModelo(): array
     {
-        return $this->modeloFiscal ? $this->modeloFiscal->getFacturasCliente() : [];
+        return $this->declaracion ? $this->declaracion->getFacturasCliente() : [];
     }
 
     /**
@@ -460,7 +463,7 @@ class Modelo420 extends Controller
      */
     public function getFacturasProveedorModelo(): array
     {
-        return $this->modeloFiscal ? $this->modeloFiscal->getFacturasProveedor() : [];
+        return $this->declaracion ? $this->declaracion->getFacturasProveedor() : [];
     }
 
     /**
@@ -484,7 +487,7 @@ class Modelo420 extends Controller
         $numeroReferencia = $this->request()->request->get('numeroreferencia', '');
         $fechaPresentacion = $this->request()->request->get('fechapresentacion', date('Y-m-d'));
 
-        if ($this->modeloFiscal->marcarPresentado($numeroReferencia ?: null, $fechaPresentacion)) {
+        if ($this->declaracion->marcarPresentado($numeroReferencia ?: null, $fechaPresentacion)) {
             Tools::log()->notice('modelo-marcado-presentado');
         } else {
             Tools::log()->error('error-marcar-presentado');
@@ -496,9 +499,9 @@ class Modelo420 extends Controller
      */
     protected function crearRectificativo(): void
     {
-        $nuevoModelo = $this->modeloFiscal->crearRectificativo();
+        $nuevoModelo = $this->declaracion->crearRectificativo();
         if ($nuevoModelo) {
-            $this->modeloFiscal = $nuevoModelo;
+            $this->declaracion = $nuevoModelo;
             Tools::log()->notice('modelo-rectificativo-creado');
         } else {
             Tools::log()->error('error-crear-rectificativo');
@@ -510,16 +513,16 @@ class Modelo420 extends Controller
      */
     protected function descargarATC(): void
     {
-        $generator = new ATCFileGenerator($this->modeloFiscal);
+        $generator = new ATCFileGenerator($this->declaracion);
 
         // Obtener el desglose de IGIC
         $desgloseVentas = $this->helper->desgloseIGICVentas(
-            $this->modeloFiscal->fechainicio,
-            $this->modeloFiscal->fechafin
+            $this->declaracion->fechainicio,
+            $this->declaracion->fechafin
         );
         $desgloseCompras = $this->helper->desgloseIGICCompras(
-            $this->modeloFiscal->fechainicio,
-            $this->modeloFiscal->fechafin
+            $this->declaracion->fechainicio,
+            $this->declaracion->fechafin
         );
 
         $generator->setDesgloseVentas($desgloseVentas)

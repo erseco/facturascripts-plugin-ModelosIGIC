@@ -1,91 +1,92 @@
-# Modelos 420/425 Canarias
+# ModelosIGIC para FacturaScripts
 
-Plugin de FacturaScripts para la generación de los **Modelos 420 y 425** de la **Agencia Tributaria Canaria (ATC)**, utilizados para la declaración del **IGIC (Impuesto General Indirecto Canario)**.
+[![codecov](https://codecov.io/gh/erseco/facturascripts-plugin-ModelosIGIC/branch/main/graph/badge.svg)](https://codecov.io/gh/erseco/facturascripts-plugin-ModelosIGIC)
 
-## Descripción
+<a href="https://erseco.github.io/facturascripts-playground/?blueprint=https%3A%2F%2Fraw.githubusercontent.com%2Ferseco%2Ffacturascripts-plugin-ModelosIGIC%2Frefs%2Fheads%2Fmain%2Fblueprint.json">
+  <img src="https://raw.githubusercontent.com/erseco/facturascripts-playground/main/ogimage.png" alt="Prueba ModelosIGIC en tu navegador" width="220">
+</a><br>
+<small><a href="https://erseco.github.io/facturascripts-playground/?blueprint=https%3A%2F%2Fraw.githubusercontent.com%2Ferseco%2Ffacturascripts-plugin-ModelosIGIC%2Frefs%2Fheads%2Fmain%2Fblueprint.json">Pruébalo en tu navegador</a></small>
 
-El **IGIC** es el impuesto indirecto que grava el consumo en las Islas Canarias, equivalente al IVA en la península pero con tipos impositivos diferentes.
+**Modelo 420** (autoliquidación trimestral del IGIC) y **Modelo 425** (declaración-resumen anual
+del IGIC) de la **Agencia Tributaria Canaria (ATC)** para FacturaScripts. Calcula el IGIC
+devengado y deducible a partir de las facturas, genera el asiento de regularización y el fichero
+para la presentación telemática.
 
-Este plugin proporciona:
+## Origen
 
-- **Modelo 420**: Autoliquidación trimestral del IGIC
-- **Modelo 425**: Declaración-resumen anual del IGIC
+Este plugin es un **fork y evolución** de
+[FacturaScripts/modelos_420_425_canarias](https://github.com/FacturaScripts/modelos_420_425_canarias),
+el plugin original para FacturaScripts 2017 de Carlos García Gómez (NeoRazorX) y Francesc Pineda,
+que dejó de ser compatible a partir de FacturaScripts 2018.
 
-## Tipos de IGIC
+Se ha reescrito por completo para FacturaScripts moderno (2025.7 o superior), manteniendo la
+licencia AGPL-3.0 y los créditos de los autores originales.
 
-| Tipo | Porcentaje | Aplicación |
-|------|------------|------------|
-| Cero | 0% | Productos básicos, exportaciones |
-| Reducido | 3% | Alimentos, transporte, vivienda |
-| General | 7% | Tipo común |
-| Incrementado | 9,5% | Ciertos productos |
-| Especial incrementado | 15% | Artículos de lujo |
-| Especial | 20% | Tabaco |
+## Características
 
-## Plazos de Presentación
-
-### Modelo 420 (Trimestral)
-- **T1** (enero-marzo): del 1 al 20 de abril
-- **T2** (abril-junio): del 1 al 20 de julio
-- **T3** (julio-septiembre): del 1 al 20 de octubre
-- **T4** (octubre-diciembre): del 1 al 30 de enero del año siguiente
-
-### Modelo 425 (Anual)
-- Del 1 al 30 de enero del año siguiente
+- **Modelo 420** (trimestral): cálculo del IGIC devengado (ventas) y deducible (compras) por
+  tipo impositivo para el trimestre elegido.
+- **Asiento de regularización**: previsualización y creación del asiento contable del
+  trimestre.
+- **Modelo 425** (anual): resumen del IGIC devengado y deducible del ejercicio.
+- **Historial de declaraciones** con su estado (borrador, presentado, rectificado), número de
+  referencia de la ATC, fecha de presentación y facturas incluidas.
+- **Declaraciones rectificativas** a partir de una declaración ya presentada.
+- **Fichero para la ATC**: descarga del fichero `.dec` para la presentación telemática en la
+  sede electrónica.
 
 ## Uso
 
 ### Modelo 420
-1. Ir a **Informes > Modelo 420**
-2. Seleccionar el período trimestral
-3. Pulsar "Calcular" para previsualizar
-4. Pulsar "Guardar" para crear la regularización
+
+1. Ve a **Informes > Modelo 420**.
+2. Elige el ejercicio y el trimestre y pulsa **Calcular** para ver la previsualización.
+3. Pulsa **Guardar** para crear la regularización y el asiento contable.
+4. Descarga el fichero `.dec` y preséntalo en la
+   [sede electrónica de la ATC](https://sede.gobiernodecanarias.org/tributos/).
+5. Marca la declaración como **presentada** indicando el número de referencia de la ATC.
 
 ### Modelo 425
-1. Ir a **Informes > Modelo 425**
-2. Seleccionar el ejercicio
-3. Se mostrará el resumen anual de IGIC devengado y deducible
 
-## Presentación Telemática
+1. Ve a **Informes > Modelo 425**.
+2. Elige el ejercicio para ver el resumen anual del IGIC devengado y deducible.
+3. Pulsa **Guardar** para registrar la declaración y, una vez presentada, márcala como
+   **presentada**.
 
-El plugin genera el fichero `.dec` necesario para la presentación telemática en la sede electrónica de la Agencia Tributaria Canaria.
-
-### Generar fichero .dec
-
-1. Ir a **Informes > Modelo 420**
-2. Seleccionar el período y pulsar "Calcular"
-3. Pulsar "Guardar" para crear la regularización
-4. Pulsar **"Descargar fichero"** para obtener el `.dec`
-
-### Presentar en la ATC
-
-1. Accede a la [sede electrónica de la ATC](https://sede.gobiernodecanarias.org/tributos/)
-2. Selecciona **Modelo 420** > **Presentación telemática**
-3. Pulsa "Examinar" y selecciona el fichero `.dec` descargado
-4. Completa el proceso de presentación
-
-## Instalación
-
-1. Descarga el ZIP desde [Releases](../../releases/latest)
-2. Ve a **Panel de Admin > Plugins** en FacturaScripts
-3. Sube el archivo ZIP y activa el plugin
+Las declaraciones guardadas se consultan en **Informes > Declaraciones IGIC**.
 
 ## Normativa
 
-- **Ley 20/1991**, de 7 de junio, modificación del Régimen Económico Fiscal de Canarias
-- **Ley 4/2012**, de 25 de junio, medidas administrativas y fiscales
-- **Real Decreto 2538/1994**, normas de desarrollo del IGIC
+Las referencias a la normativa aplicada están en [`doc/NORMATIVA.md`](doc/NORMATIVA.md).
+**La revisión de la normativa vigente está en curso**: antes de presentar una declaración,
+comprueba los importes con el programa de ayuda de la ATC o con tu asesor.
 
-## Enlaces
+## Instalación
 
-- [Agencia Tributaria Canaria](https://www3.gobiernodecanarias.org/tributos/)
-- [Información Modelo 420](https://www3.gobiernodecanarias.org/tributos/atc/w/modelo-420)
+1. Descarga el ZIP desde [Releases](../../releases/latest).
+2. Ve a **Panel de Admin > Plugins** en FacturaScripts.
+3. Sube el archivo ZIP y activa el plugin.
+
+## Requisitos
+
+- FacturaScripts **2025.7** o superior.
+- PHP **8.1** o superior.
+- Empresa con impuestos IGIC y plan contable configurados.
+
+## Desarrollo
+
+- `make upd` — arranca los contenedores Docker (FacturaScripts en <http://localhost:8081>)
+- `make lint` — comprueba el estilo de código
+- `make format` — corrige automáticamente el estilo
+- `make test` — ejecuta los tests
+- `make package VERSION=1.0` — genera el ZIP de distribución
 
 ## Créditos
 
-- **Carlos García Gómez** - Autor original
-- **Ernesto Serrano** - Actualización para FacturaScripts moderno
+- **Carlos García Gómez** (NeoRazorX) y **Francesc Pineda** — plugin original
+  [modelos_420_425_canarias](https://github.com/FacturaScripts/modelos_420_425_canarias).
+- **Ernesto Serrano** — reescritura para FacturaScripts moderno.
 
 ## Licencia
 
-LGPL-3.0. Ver [LICENSE](LICENSE) para más detalles.
+AGPL-3.0. Ver [LICENSE](LICENSE) para más detalles.
