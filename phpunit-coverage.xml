@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit bootstrap="Test/bootstrap.php" colors="true" failOnWarning="true">
+    <testsuites>
+        <testsuite name="ModelosIGIC"><directory>Test/Plugins</directory></testsuite>
+    </testsuites>
+    <coverage includeUncoveredFiles="true" processUncoveredFiles="true">
+        <include>
+            <directory suffix=".php">Plugins/ModelosIGIC/Controller</directory>
+            <directory suffix=".php">Plugins/ModelosIGIC/Extension</directory>
+            <directory suffix=".php">Plugins/ModelosIGIC/Lib</directory>
+            <directory suffix=".php">Plugins/ModelosIGIC/Model</directory>
+            <directory suffix=".php">Plugins/ModelosIGIC/Worker</directory>
+            <file>Plugins/ModelosIGIC/Init.php</file>
+        </include>
+    </coverage>
+</phpunit>

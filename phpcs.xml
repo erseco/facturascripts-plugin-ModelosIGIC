@@ -5,7 +5,8 @@
     <!-- Files to check (relative to plugin root) -->
     <file>Controller</file>
     <file>Lib</file>
-    <file>Test/main</file>
+    <file>Model</file>
+    <file>Test</file>
     <file>Init.php</file>
 
     <!-- Exclude patterns -->
@@ -15,6 +16,9 @@
     <exclude-pattern>*/XMLView/*</exclude-pattern>
     <exclude-pattern>*/facturascripts/*</exclude-pattern>
     <exclude-pattern>*/dist/*</exclude-pattern>
+    <exclude-pattern>Test/bootstrap.php</exclude-pattern>
+    <exclude-pattern>Test/install-plugins.php</exclude-pattern>
+    <exclude-pattern>Test/check-coverage.php</exclude-pattern>
 
     <!-- Include PSR-12 standard -->
     <rule ref="PSR12"/>

@@ -23,7 +23,7 @@
                     <a href="{{ fsc.url() }}" class="btn btn-outline-secondary">
                         <i class="fa-solid fa-arrow-left fa-fw"></i> {{ i18n.trans('volver') }}
                     </a>
-                    {% if fsc.modeloFiscal %}
+                    {% if fsc.declaracion %}
                         <a href="{{ fsc.url() }}?id={{ fsc.selectedRegiva.idregiva }}&download-atc=1" class="btn btn-primary">
                             <i class="fa-solid fa-download fa-fw"></i> {{ i18n.trans('descargar-atc') }}
                         </a>
@@ -218,7 +218,7 @@
                     </div>
 
                     {# Estado del modelo fiscal #}
-                    {% if fsc.modeloFiscal %}
+                    {% if fsc.declaracion %}
                         <div class="card mb-3">
                             <div class="card-header">
                                 <i class="fa-solid fa-file-circle-check fa-fw"></i> {{ i18n.trans('estado-modelo') }}
@@ -226,35 +226,35 @@
                             <div class="card-body">
                                 <p class="mb-2">
                                     <strong>{{ i18n.trans('estado') }}:</strong>
-                                    <span class="badge bg-{{ fsc.modeloFiscal.estadoClase() }}">
-                                        {{ fsc.modeloFiscal.estadoDescripcion() }}
+                                    <span class="badge bg-{{ fsc.declaracion.estadoClase() }}">
+                                        {{ fsc.declaracion.estadoDescripcion() }}
                                     </span>
                                 </p>
-                                {% if fsc.modeloFiscal.numeroreferencia %}
+                                {% if fsc.declaracion.numeroreferencia %}
                                     <p class="mb-2">
                                         <strong>{{ i18n.trans('numero-referencia-atc') }}:</strong>
-                                        {{ fsc.modeloFiscal.numeroreferencia }}
+                                        {{ fsc.declaracion.numeroreferencia }}
                                     </p>
                                 {% endif %}
-                                {% if fsc.modeloFiscal.fechapresentacion %}
+                                {% if fsc.declaracion.fechapresentacion %}
                                     <p class="mb-2">
                                         <strong>{{ i18n.trans('fecha-presentacion') }}:</strong>
-                                        {{ fsc.modeloFiscal.fechapresentacion }}
+                                        {{ fsc.declaracion.fechapresentacion }}
                                     </p>
                                 {% endif %}
-                                {% if fsc.modeloFiscal.esRectificativo() %}
+                                {% if fsc.declaracion.esRectificativo() %}
                                     <p class="mb-0">
                                         <span class="badge bg-info">{{ i18n.trans('modelo-rectificativo') }}</span>
                                     </p>
                                 {% endif %}
                             </div>
-                            {% if fsc.modeloFiscal.estado == 'borrador' %}
+                            {% if fsc.declaracion.estado == 'borrador' %}
                                 <div class="card-footer">
                                     <button type="button" class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#modalMarcarPresentado">
                                         <i class="fa-solid fa-check fa-fw"></i> {{ i18n.trans('marcar-presentado') }}
                                     </button>
                                 </div>
-                            {% elseif fsc.modeloFiscal.estado == 'presentado' %}
+                            {% elseif fsc.declaracion.estado == 'presentado' %}
                                 <div class="card-footer">
                                     <button type="button" class="btn btn-sm btn-warning" data-bs-toggle="modal" data-bs-target="#modalCrearRectificativo">
                                         <i class="fa-solid fa-edit fa-fw"></i> {{ i18n.trans('crear-rectificativo') }}
@@ -267,7 +267,7 @@
             </div>
 
             {# Pestaña de facturas incluidas #}
-            {% if fsc.modeloFiscal %}
+            {% if fsc.declaracion %}
                 <div class="row mt-4">
                     <div class="col-12">
                         <ul class="nav nav-tabs" id="tabsFacturas" role="tablist">
@@ -571,13 +571,13 @@
     </script>
 
     {# Modal para marcar como presentado #}
-    {% if fsc.modeloFiscal and fsc.modeloFiscal.estado == 'borrador' %}
+    {% if fsc.declaracion and fsc.declaracion.estado == 'borrador' %}
         <div class="modal fade" id="modalMarcarPresentado" tabindex="-1" aria-hidden="true">
             <div class="modal-dialog">
                 <div class="modal-content">
                     <form action="{{ fsc.url() }}?id={{ fsc.selectedRegiva.idregiva }}" method="post">
                         <input type="hidden" name="proceso" value="marcar-presentado">
-                        <input type="hidden" name="idmodelo" value="{{ fsc.modeloFiscal.idmodelo }}">
+                        <input type="hidden" name="idmodelo" value="{{ fsc.declaracion.idmodelo }}">
                         <div class="modal-header">
                             <h5 class="modal-title">
                                 <i class="fa-solid fa-check fa-fw"></i> {{ i18n.trans('marcar-presentado') }}
@@ -607,13 +607,13 @@
     {% endif %}
 
     {# Modal para crear rectificativo #}
-    {% if fsc.modeloFiscal and fsc.modeloFiscal.estado == 'presentado' %}
+    {% if fsc.declaracion and fsc.declaracion.estado == 'presentado' %}
         <div class="modal fade" id="modalCrearRectificativo" tabindex="-1" aria-hidden="true">
             <div class="modal-dialog">
                 <div class="modal-content">
                     <form action="{{ fsc.url() }}?id={{ fsc.selectedRegiva.idregiva }}" method="post">
                         <input type="hidden" name="proceso" value="crear-rectificativo">
-                        <input type="hidden" name="idmodelo" value="{{ fsc.modeloFiscal.idmodelo }}">
+                        <input type="hidden" name="idmodelo" value="{{ fsc.declaracion.idmodelo }}">
                         <div class="modal-header">
                             <h5 class="modal-title">
                                 <i class="fa-solid fa-edit fa-fw"></i> {{ i18n.trans('crear-rectificativo') }}

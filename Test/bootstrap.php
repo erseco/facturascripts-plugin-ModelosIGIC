@@ -1,7 +1,7 @@
 <?php
 
 /**
- * This file is part of Modelos420_425_Canarias plugin for FacturaScripts.
+ * This file is part of ModelosIGIC plugin for FacturaScripts.
  * Copyright (C) 2026 Ernesto Serrano <info@ernesto.es>
  *
  * PHPUnit bootstrap file for testing
@@ -27,18 +27,22 @@ if (!defined('FS_TIMEZONE')) {
     define('FS_TIMEZONE', 'Atlantic/Canary');
 }
 
-if (!defined('FS_ROUTE')) {
-    define('FS_ROUTE', '');
-}
-
 // Register plugin namespaces with the autoloader
 $loader = require FS_FOLDER . '/vendor/autoload.php';
 
 // Register FacturaScripts Core
 $loader->addPsr4('FacturaScripts\\Core\\', FS_FOLDER . '/Core');
 
-// Register Modelos420_425_Canarias plugin
-$loader->addPsr4('FacturaScripts\\Plugins\\Modelos420_425_Canarias\\', FS_FOLDER . '/Plugins/Modelos420_425_Canarias');
+// Register ModelosIGIC
+$loader->addPsr4('FacturaScripts\\Plugins\\ModelosIGIC\\', FS_FOLDER . '/Plugins/ModelosIGIC');
 
-// Register Dinamic namespace (fallback to Core)
 $loader->addPsr4('FacturaScripts\\Dinamic\\', FS_FOLDER . '/Dinamic');
+
+// Deploy real table definitions before instantiating plugin models.
+FacturaScripts\Core\Kernel::init();
+if (!in_array('ModelosIGIC', FacturaScripts\Core\Plugins::enabled(), true)) {
+    if (!FacturaScripts\Core\Plugins::enable('ModelosIGIC')) {
+        throw new RuntimeException('Could not enable ModelosIGIC for testing');
+    }
+}
+FacturaScripts\Core\Plugins::deploy();

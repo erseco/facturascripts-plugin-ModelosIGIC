@@ -1,18 +1,18 @@
 <?php
 
 /**
- * This file is part of Modelos420_425_Canarias plugin for FacturaScripts.
+ * This file is part of ModelosIGIC plugin for FacturaScripts.
  * Copyright (C) 2026 Ernesto Serrano <info@ernesto.es>
  *
  * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Lesser General Public License as
+ * it under the terms of the GNU Affero General Public License as
  * published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
  */
 
-namespace FacturaScripts\Test\Plugins\Modelos420_425_Canarias;
+namespace FacturaScripts\Test\Plugins\ModelosIGIC;
 
-use FacturaScripts\Plugins\Modelos420_425_Canarias\Lib\ATCFileGenerator;
+use FacturaScripts\Plugins\ModelosIGIC\Lib\ATCFileGenerator;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
 
@@ -46,7 +46,7 @@ class ATCFileGeneratorTest extends TestCase
     public function testCorrectNamespace(): void
     {
         $this->assertEquals(
-            'FacturaScripts\\Plugins\\Modelos420_425_Canarias\\Lib',
+            'FacturaScripts\\Plugins\\ModelosIGIC\\Lib',
             $this->reflection->getNamespaceName(),
             'ATCFileGenerator should be in correct namespace'
         );
@@ -260,8 +260,8 @@ class ATCFileGeneratorTest extends TestCase
 
     public function testFixtureFilesAreValidDEC(): void
     {
-        // Los fixtures están montados en ../fixtures/ gracias al docker-compose.yml
-        $fixturesDir = __DIR__ . '/../fixtures/';
+        // Los fixtures viajan con el plugin; los tests se copian a Test/Plugins del núcleo.
+        $fixturesDir = FS_FOLDER . '/Plugins/ModelosIGIC/Test/fixtures/';
 
         if (!is_dir($fixturesDir)) {
             $this->markTestSkipped('Fixtures directory not found: ' . $fixturesDir);

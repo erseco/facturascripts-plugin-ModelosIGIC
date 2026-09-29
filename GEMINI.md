@@ -1,4 +1,4 @@
-# CLAUDE.md
+# GEMINI.md
 
 Repository-wide coding instructions are defined in [`/AGENTS.md`](/AGENTS.md).
 Read that file for the full context before making any changes.

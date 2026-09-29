@@ -1,24 +1,24 @@
 <?php
 
 /**
- * This file is part of Modelos420_425_Canarias plugin for FacturaScripts.
+ * This file is part of ModelosIGIC plugin for FacturaScripts.
  * Copyright (C) 2026 Ernesto Serrano <info@ernesto.es>
  *
  * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Lesser General Public License as
+ * it under the terms of the GNU Affero General Public License as
  * published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Lesser General Public License for more details.
+ * GNU Affero General Public License for more details.
  *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-namespace FacturaScripts\Plugins\Modelos420_425_Canarias\Controller;
+namespace FacturaScripts\Plugins\ModelosIGIC\Controller;
 
 use FacturaScripts\Core\Lib\ExtendedController\ListController;
 
@@ -28,13 +28,13 @@ use FacturaScripts\Core\Lib\ExtendedController\ListController;
  * Muestra el historial de modelos 420 y 425 con filtros por tipo, período,
  * ejercicio y estado.
  */
-class ListModeloFiscal extends ListController
+class ListDeclaracionIGIC extends ListController
 {
     public function getPageData(): array
     {
         $data = parent::getPageData();
         $data['menu'] = 'reports';
-        $data['title'] = 'modelos-fiscales';
+        $data['title'] = 'declaraciones-igic';
         $data['icon'] = 'fa-solid fa-file-invoice';
         $data['showonmenu'] = true;
         return $data;
@@ -42,12 +42,12 @@ class ListModeloFiscal extends ListController
 
     protected function createViews(): void
     {
-        $this->createViewModeloFiscal();
+        $this->createViewDeclaracionIGIC();
     }
 
-    protected function createViewModeloFiscal(string $viewName = 'ListModeloFiscal'): void
+    protected function createViewDeclaracionIGIC(string $viewName = 'ListDeclaracionIGIC'): void
     {
-        $this->addView($viewName, 'ModeloFiscal', 'modelos-fiscales', 'fa-solid fa-file-invoice');
+        $this->addView($viewName, 'DeclaracionIGIC', 'declaraciones-igic', 'fa-solid fa-file-invoice');
         $this->addOrderBy($viewName, ['fechacreacion'], 'fecha', 2);
         $this->addOrderBy($viewName, ['codejercicio', 'periodo'], 'ejercicio');
         $this->addOrderBy($viewName, ['tipo', 'periodo'], 'tipo');

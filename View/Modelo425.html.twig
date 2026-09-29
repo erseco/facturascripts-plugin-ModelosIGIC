@@ -15,7 +15,7 @@
                 <p class="text-muted mb-0">{{ i18n.trans('modelo-425-descripcion') }}</p>
             </div>
             <div class="col-sm-6 text-end">
-                {% if fsc.selectedEjercicio and fsc.modeloFiscal is null %}
+                {% if fsc.selectedEjercicio and fsc.declaracion is null %}
                     <form action="{{ fsc.url() }}" method="post" class="d-inline">
                         <input type="hidden" name="proceso" value="guardar">
                         <input type="hidden" name="codejercicio" value="{{ fsc.selectedEjercicio.codejercicio }}">
@@ -208,7 +208,7 @@
                     </div>
 
                     {# Estado del modelo fiscal #}
-                    {% if fsc.modeloFiscal %}
+                    {% if fsc.declaracion %}
                         <div class="card mb-4 d-print-none">
                             <div class="card-header">
                                 <i class="fa-solid fa-file-circle-check fa-fw"></i> {{ i18n.trans('estado-modelo') }}
@@ -218,25 +218,25 @@
                                     <div class="col-md-6">
                                         <p class="mb-2">
                                             <strong>{{ i18n.trans('estado') }}:</strong>
-                                            <span class="badge bg-{{ fsc.modeloFiscal.estadoClase() }}">
-                                                {{ fsc.modeloFiscal.estadoDescripcion() }}
+                                            <span class="badge bg-{{ fsc.declaracion.estadoClase() }}">
+                                                {{ fsc.declaracion.estadoDescripcion() }}
                                             </span>
                                         </p>
-                                        {% if fsc.modeloFiscal.numeroreferencia %}
+                                        {% if fsc.declaracion.numeroreferencia %}
                                             <p class="mb-2">
                                                 <strong>{{ i18n.trans('numero-referencia-atc') }}:</strong>
-                                                {{ fsc.modeloFiscal.numeroreferencia }}
+                                                {{ fsc.declaracion.numeroreferencia }}
                                             </p>
                                         {% endif %}
-                                        {% if fsc.modeloFiscal.fechapresentacion %}
+                                        {% if fsc.declaracion.fechapresentacion %}
                                             <p class="mb-0">
                                                 <strong>{{ i18n.trans('fecha-presentacion') }}:</strong>
-                                                {{ fsc.modeloFiscal.fechapresentacion }}
+                                                {{ fsc.declaracion.fechapresentacion }}
                                             </p>
                                         {% endif %}
                                     </div>
                                     <div class="col-md-6 text-end">
-                                        {% if fsc.modeloFiscal.estado == 'borrador' %}
+                                        {% if fsc.declaracion.estado == 'borrador' %}
                                             <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#modalMarcarPresentado425">
                                                 <i class="fa-solid fa-check fa-fw"></i> {{ i18n.trans('marcar-presentado') }}
                                             </button>
@@ -323,7 +323,7 @@
             </div>
 
             {# Pestaña de facturas incluidas #}
-            {% if fsc.modeloFiscal %}
+            {% if fsc.declaracion %}
                 <div class="row mt-4 d-print-none">
                     <div class="col-12">
                         <ul class="nav nav-tabs" id="tabsFacturas425" role="tablist">
@@ -457,14 +457,14 @@
     </div>
 
     {# Modal para marcar como presentado #}
-    {% if fsc.modeloFiscal and fsc.modeloFiscal.estado == 'borrador' %}
+    {% if fsc.declaracion and fsc.declaracion.estado == 'borrador' %}
         <div class="modal fade" id="modalMarcarPresentado425" tabindex="-1" aria-hidden="true">
             <div class="modal-dialog">
                 <div class="modal-content">
                     <form action="{{ fsc.url() }}" method="post">
                         <input type="hidden" name="proceso" value="marcar-presentado">
                         <input type="hidden" name="codejercicio" value="{{ fsc.selectedEjercicio.codejercicio }}">
-                        <input type="hidden" name="idmodelo" value="{{ fsc.modeloFiscal.idmodelo }}">
+                        <input type="hidden" name="idmodelo" value="{{ fsc.declaracion.idmodelo }}">
                         <div class="modal-header">
                             <h5 class="modal-title">
                                 <i class="fa-solid fa-check fa-fw"></i> {{ i18n.trans('marcar-presentado') }}

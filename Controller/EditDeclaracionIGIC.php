@@ -1,38 +1,38 @@
 <?php
 
 /**
- * This file is part of Modelos420_425_Canarias plugin for FacturaScripts.
+ * This file is part of ModelosIGIC plugin for FacturaScripts.
  * Copyright (C) 2026 Ernesto Serrano <info@ernesto.es>
  *
  * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Lesser General Public License as
+ * it under the terms of the GNU Affero General Public License as
  * published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Lesser General Public License for more details.
+ * GNU Affero General Public License for more details.
  *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-namespace FacturaScripts\Plugins\Modelos420_425_Canarias\Controller;
+namespace FacturaScripts\Plugins\ModelosIGIC\Controller;
 
 use FacturaScripts\Core\Lib\ExtendedController\EditController;
-use FacturaScripts\Plugins\Modelos420_425_Canarias\Lib\ATCFileGenerator;
-use FacturaScripts\Plugins\Modelos420_425_Canarias\Lib\IGICHelper;
-use FacturaScripts\Plugins\Modelos420_425_Canarias\Model\ModeloFiscal;
+use FacturaScripts\Plugins\ModelosIGIC\Lib\ATCFileGenerator;
+use FacturaScripts\Plugins\ModelosIGIC\Lib\IGICHelper;
+use FacturaScripts\Plugins\ModelosIGIC\Model\DeclaracionIGIC;
 
 /**
  * Controlador para editar/visualizar un modelo fiscal.
  */
-class EditModeloFiscal extends EditController
+class EditDeclaracionIGIC extends EditController
 {
     public function getModelClassName(): string
     {
-        return 'ModeloFiscal';
+        return 'DeclaracionIGIC';
     }
 
     protected function execPreviousAction($action): bool
@@ -51,7 +51,7 @@ class EditModeloFiscal extends EditController
     protected function downloadATC(): void
     {
         $code = $this->request->get('code');
-        $modelo = new ModeloFiscal();
+        $modelo = new DeclaracionIGIC();
         if (false === $modelo->loadFromCode($code)) {
             return;
         }
@@ -82,7 +82,7 @@ class EditModeloFiscal extends EditController
     {
         $data = parent::getPageData();
         $data['menu'] = 'reports';
-        $data['title'] = 'modelo-fiscal';
+        $data['title'] = 'declaracion-igic';
         $data['icon'] = 'fa-solid fa-file-invoice';
         $data['showonmenu'] = false;
         return $data;
@@ -108,9 +108,9 @@ class EditModeloFiscal extends EditController
         $this->createViewFacturasProveedor();
     }
 
-    protected function createViewFacturasCliente(string $viewName = 'ListModeloFiscalFactura-cliente'): void
+    protected function createViewFacturasCliente(string $viewName = 'ListDeclaracionIGICFactura-cliente'): void
     {
-        $this->addListView($viewName, 'ModeloFiscalFactura', 'facturas-ventas', 'fa-solid fa-file-invoice');
+        $this->addListView($viewName, 'DeclaracionIGICFactura', 'facturas-ventas', 'fa-solid fa-file-invoice');
         $this->views[$viewName]->addOrderBy(['fecha'], 'fecha', 2);
         $this->views[$viewName]->addOrderBy(['codigo'], 'codigo');
         $this->views[$viewName]->addSearchFields(['codigo', 'cifnif', 'nombre']);
@@ -120,9 +120,9 @@ class EditModeloFiscal extends EditController
         $this->setSettings($viewName, 'btnDelete', false);
     }
 
-    protected function createViewFacturasProveedor(string $viewName = 'ListModeloFiscalFactura-proveedor'): void
+    protected function createViewFacturasProveedor(string $viewName = 'ListDeclaracionIGICFactura-proveedor'): void
     {
-        $this->addListView($viewName, 'ModeloFiscalFactura', 'facturas-compras', 'fa-solid fa-file-invoice-dollar');
+        $this->addListView($viewName, 'DeclaracionIGICFactura', 'facturas-compras', 'fa-solid fa-file-invoice-dollar');
         $this->views[$viewName]->addOrderBy(['fecha'], 'fecha', 2);
         $this->views[$viewName]->addOrderBy(['codigo'], 'codigo');
         $this->views[$viewName]->addSearchFields(['codigo', 'cifnif', 'nombre']);
@@ -137,7 +137,7 @@ class EditModeloFiscal extends EditController
         $mvn = $this->getMainViewName();
 
         switch ($viewName) {
-            case 'ListModeloFiscalFactura-cliente':
+            case 'ListDeclaracionIGICFactura-cliente':
                 $idmodelo = $this->getViewModelValue($mvn, 'idmodelo');
                 $where = [
                     new \FacturaScripts\Core\Base\DataBase\DataBaseWhere('idmodelo', $idmodelo),
@@ -146,7 +146,7 @@ class EditModeloFiscal extends EditController
                 $view->loadData('', $where);
                 break;
 
-            case 'ListModeloFiscalFactura-proveedor':
+            case 'ListDeclaracionIGICFactura-proveedor':
                 $idmodelo = $this->getViewModelValue($mvn, 'idmodelo');
                 $where = [
                     new \FacturaScripts\Core\Base\DataBase\DataBaseWhere('idmodelo', $idmodelo),

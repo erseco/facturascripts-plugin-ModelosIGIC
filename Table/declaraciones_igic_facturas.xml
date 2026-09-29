@@ -53,11 +53,11 @@
         <default>true</default>
     </column>
     <constraint>
-        <name>modelosfiscales_facturas_pkey</name>
+        <name>declaraciones_igic_facturas_pkey</name>
         <type>PRIMARY KEY (id)</type>
     </constraint>
     <constraint>
-        <name>ca_modelosfiscales_facturas_modelo</name>
-        <type>FOREIGN KEY (idmodelo) REFERENCES modelosfiscales (idmodelo) ON DELETE CASCADE ON UPDATE CASCADE</type>
+        <name>ca_declaraciones_igic_facturas_modelo</name>
+        <type>FOREIGN KEY (idmodelo) REFERENCES declaraciones_igic (idmodelo) ON DELETE CASCADE ON UPDATE CASCADE</type>
     </constraint>
 </table>

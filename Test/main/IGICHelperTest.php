@@ -1,18 +1,18 @@
 <?php
 
 /**
- * This file is part of Modelos420_425_Canarias plugin for FacturaScripts.
+ * This file is part of ModelosIGIC plugin for FacturaScripts.
  * Copyright (C) 2026 Ernesto Serrano <info@ernesto.es>
  *
  * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Lesser General Public License as
+ * it under the terms of the GNU Affero General Public License as
  * published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
  */
 
-namespace FacturaScripts\Test\Plugins\Modelos420_425_Canarias;
+namespace FacturaScripts\Test\Plugins\ModelosIGIC;
 
-use FacturaScripts\Plugins\Modelos420_425_Canarias\Lib\IGICHelper;
+use FacturaScripts\Plugins\ModelosIGIC\Lib\IGICHelper;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
 
@@ -40,7 +40,7 @@ class IGICHelperTest extends TestCase
     public function testCorrectNamespace(): void
     {
         $this->assertEquals(
-            'FacturaScripts\\Plugins\\Modelos420_425_Canarias\\Lib',
+            'FacturaScripts\\Plugins\\ModelosIGIC\\Lib',
             $this->reflection->getNamespaceName(),
             'IGICHelper should be in correct namespace'
         );

@@ -1,28 +1,28 @@
 <?php
 
 /**
- * This file is part of Modelos420_425_Canarias plugin for FacturaScripts.
+ * This file is part of ModelosIGIC plugin for FacturaScripts.
  * Copyright (C) 2026 Ernesto Serrano <info@ernesto.es>
  *
  * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Lesser General Public License as
+ * it under the terms of the GNU Affero General Public License as
  * published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Lesser General Public License for more details.
+ * GNU Affero General Public License for more details.
  *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-namespace FacturaScripts\Plugins\Modelos420_425_Canarias\Lib;
+namespace FacturaScripts\Plugins\ModelosIGIC\Lib;
 
 use DOMDocument;
 use FacturaScripts\Dinamic\Model\Empresa;
-use FacturaScripts\Plugins\Modelos420_425_Canarias\Model\ModeloFiscal;
+use FacturaScripts\Plugins\ModelosIGIC\Model\DeclaracionIGIC;
 
 /**
  * Generador de ficheros para la Agencia Tributaria Canaria (ATC).
@@ -44,8 +44,8 @@ class ATCFileGenerator
     /** @var Empresa */
     protected Empresa $empresa;
 
-    /** @var ModeloFiscal */
-    protected ModeloFiscal $modelo;
+    /** @var DeclaracionIGIC */
+    protected DeclaracionIGIC $modelo;
 
     /** @var array */
     protected array $desgloseVentas = [];
@@ -56,7 +56,7 @@ class ATCFileGenerator
     /** @var string Formato de salida: 'dec' o 'atc' */
     protected string $format = self::FORMAT_DEC;
 
-    public function __construct(ModeloFiscal $modelo)
+    public function __construct(DeclaracionIGIC $modelo)
     {
         $this->modelo = $modelo;
         $this->empresa = new Empresa();

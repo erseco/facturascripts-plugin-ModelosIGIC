@@ -2,7 +2,7 @@
 <view>
     <columns>
         <column name="tipo" display="left" order="10">
-            <widget type="text" fieldname="tipo" onclick="EditModeloFiscal" />
+            <widget type="text" fieldname="tipo" onclick="EditDeclaracionIGIC" />
         </column>
         <column name="periodo" display="left" order="20">
             <widget type="text" fieldname="periodo" />

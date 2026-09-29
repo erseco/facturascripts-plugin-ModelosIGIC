@@ -6,8 +6,10 @@ on:
   push:
     branches:
       - main
-      - master
       - develop
+
+permissions:
+  contents: read
 
 jobs:
   docker-test:
@@ -16,7 +18,7 @@ jobs:
 
     steps:
       - name: Checkout plugin
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Remove plugin mount from docker-compose.yml
         run: |
@@ -33,10 +35,10 @@ jobs:
           elapsed=0
           while [ $elapsed -lt $timeout ]; do
             if docker compose ps | grep -q "healthy"; then
-              echo "Services are healthy"
+              echo "✅ Services are healthy"
               break
             fi
-            echo "Waiting for services... ($elapsed/$timeout seconds)"
+            echo "⏳ Waiting for services... ($elapsed/$timeout seconds)"
             sleep 5
             elapsed=$((elapsed + 5))
           done
@@ -44,18 +46,22 @@ jobs:
           echo "Waiting for FacturaScripts to initialize..."
           sleep 15
 
+      - name: Restore Composer manifest omitted from the production image
+        run: |
+          docker compose exec -T facturascripts sh -c 'test -f composer.json || curl -fsSL https://raw.githubusercontent.com/NeoRazorX/facturascripts/master/composer.json -o composer.json'
+
       - name: Copy plugin files to container
         run: |
-          echo "Copying plugin files to container..."
-          docker compose exec -T facturascripts mkdir -p /var/www/html/Plugins/Modelos420_425_Canarias
-          docker cp . facturascripts-plugin-modelos_420_425_canarias-facturascripts-1:/var/www/html/Plugins/Modelos420_425_Canarias/
+          echo "📦 Copying plugin files to container..."
+          docker compose exec -T facturascripts mkdir -p /var/www/html/Plugins/ModelosIGIC
+          docker cp . facturascripts-plugin-modelosigic-facturascripts-1:/var/www/html/Plugins/ModelosIGIC/
 
-          echo "Fixing permissions..."
-          docker compose exec -T facturascripts chown -R nobody:nobody /var/www/html/Plugins/Modelos420_425_Canarias || true
+          echo "📋 Fixing permissions..."
+          docker compose exec -T facturascripts chown -R nobody:nobody /var/www/html/Plugins/ModelosIGIC || true
 
-          echo "Plugin files copied successfully"
+          echo "✅ Plugin files copied successfully"
 
-      - name: Run PHP code style check
+      - name: Run code style check
         run: make lint
 
       - name: Run tests
@@ -64,7 +70,7 @@ jobs:
       - name: Show logs on failure
         if: failure()
         run: |
-          echo "Full logs:"
+          echo "📋 Full logs:"
           docker compose logs
 
       - name: Stop Docker environment
@@ -72,12 +78,15 @@ jobs:
         run: make clean
 
   test:
+    permissions:
+      contents: read
+      id-token: write
     needs: docker-test
     runs-on: ubuntu-latest
 
     strategy:
       matrix:
-        php-version: ['8.2', '8.3', '8.4']
+        php-version: ['8.1', '8.2', '8.3', '8.4', '8.5']
 
     services:
       mysql:
@@ -95,7 +104,7 @@ jobs:
 
     steps:
       - name: Checkout plugin
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           path: plugin
 
@@ -105,7 +114,7 @@ jobs:
           php-version: ${{ matrix.php-version }}
           extensions: mbstring, intl, curl, dom, json, pdo, mysql, xml, zip, soap
           tools: composer
-          coverage: none
+          coverage: ${{ matrix.php-version == '8.3' && 'pcov' || 'none' }}
 
       - name: Download FacturaScripts
         run: |
@@ -115,8 +124,8 @@ jobs:
 
       - name: Install plugin
         run: |
-          mkdir -p facturascripts/Plugins/Modelos420_425_Canarias
-          cp -r plugin/* facturascripts/Plugins/Modelos420_425_Canarias/
+          mkdir -p facturascripts/Plugins/ModelosIGIC
+          cp -r plugin/* facturascripts/Plugins/ModelosIGIC/
 
       - name: Setup FacturaScripts
         working-directory: facturascripts
@@ -148,6 +157,8 @@ jobs:
           if [ -d "plugin/Test/main" ]; then
             cp -r plugin/Test/main/* facturascripts/Test/Plugins/
           fi
+          cp plugin/Test/bootstrap.php facturascripts/Test/bootstrap.php
+          cp plugin/Test/install-plugins.php facturascripts/Test/install-plugins.php
 
       - name: Install test dependencies
         working-directory: facturascripts
@@ -166,19 +177,26 @@ jobs:
       - name: Run PHPUnit tests
         working-directory: facturascripts
         run: |
-          if [ -f "phpunit-plugins.xml" ]; then
-            vendor/bin/phpunit -c phpunit-plugins.xml
+          cp Plugins/ModelosIGIC/phpunit-coverage.xml phpunit-coverage.xml
+          if [ "${{ matrix.php-version }}" = "8.3" ]; then
+            php -d pcov.directory=Plugins/ModelosIGIC vendor/bin/phpunit \
+              -c phpunit-coverage.xml --coverage-clover coverage.xml --coverage-text
           else
-            echo "No phpunit-plugins.xml found, creating one..."
-            cat > phpunit-plugins.xml << 'EOF'
-          <?xml version="1.0" encoding="UTF-8"?>
-          <phpunit bootstrap="Test/bootstrap.php" colors="true">
-              <testsuites>
-                  <testsuite name="PluginTests">
-                      <directory>Test/Plugins</directory>
-                  </testsuite>
-              </testsuites>
-          </phpunit>
-          EOF
-            vendor/bin/phpunit -c phpunit-plugins.xml
+            vendor/bin/phpunit -c phpunit-coverage.xml
           fi
+
+      - name: Upload coverage to Codecov
+        if: ${{ matrix.php-version == '8.3' }}
+        uses: codecov/codecov-action@v7
+        with:
+          use_oidc: true
+          working-directory: plugin
+          files: ../facturascripts/coverage.xml
+          disable_search: true
+          # The repository is not yet activated on Codecov (renamed GitHub fork).
+          # Switch back to true once codecov.io/gh/erseco/facturascripts-plugin-ModelosIGIC exists.
+          fail_ci_if_error: false
+
+      - name: Enforce minimum coverage
+        if: ${{ matrix.php-version == '8.3' }}
+        run: php plugin/Test/check-coverage.php facturascripts/coverage.xml
