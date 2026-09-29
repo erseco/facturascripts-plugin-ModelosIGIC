@@ -24,7 +24,6 @@ use FacturaScripts\Core\Base\ControllerPermissions;
 use FacturaScripts\Core\DataSrc\Empresas;
 use FacturaScripts\Core\Lib\Accounting\AccountingPlanImport;
 use FacturaScripts\Core\Lib\Calculator;
-use FacturaScripts\Core\Lib\MenuManager;
 use FacturaScripts\Core\Response;
 use FacturaScripts\Core\Template\Controller as TemplateController;
 use FacturaScripts\Core\Tools;
@@ -151,19 +150,13 @@ trait ModelosIGICFixtures
             return $method->invoke($controller)->getContent();
         }
 
-        // controladores clásicos (ListController, EditController...)
+        // controladores clásicos (ListController, EditController...): se ejecuta su lógica
+        // sin renderizar la plantilla del núcleo, que en instalaciones mínimas de CI
+        // intenta crear tablas con datos por defecto que no existen
         $className = (new ReflectionClass($controller))->getShortName();
         $user = $this->login();
         $response = (new Response())->disableSend();
         $controller->privateCore($response, $user, new ControllerPermissions($user, $className));
-        if ($controller->getTemplate()) {
-            $response->view($controller->getTemplate(), [
-                'controllerName' => $className,
-                'fsc' => $controller,
-                'menuManager' => MenuManager::init()->selectPage($controller->getPageData()),
-                'template' => $controller->getTemplate(),
-            ]);
-        }
 
         return $response->getContent();
     }

@@ -160,9 +160,11 @@ final class Modelo425ControllerTest extends TestCase
 
     public function testListadoDeDeclaraciones(): void
     {
-        $html = $this->runController(new ListDeclaracionIGIC('ListDeclaracionIGIC'));
+        $controller = new ListDeclaracionIGIC('ListDeclaracionIGIC');
+        $this->runController($controller);
 
-        $this->assertStringContainsString('ListDeclaracionIGIC', $html);
+        $this->assertArrayHasKey('ListDeclaracionIGIC', $controller->views);
+        $this->assertNotFalse($controller->getTemplate());
     }
 
     public function testEditarYDescargarDeclaracion(): void
@@ -174,8 +176,8 @@ final class Modelo425ControllerTest extends TestCase
         // ficha con las pestañas de facturas
         $this->request([], ['code' => $declaracion->idmodelo]);
         $controller = new EditDeclaracionIGIC('EditDeclaracionIGIC');
-        $html = $this->runController($controller);
-        $this->assertStringContainsString('ListDeclaracionIGICFactura-cliente', $html);
+        $this->runController($controller);
+        $this->assertTrue($controller->views['EditDeclaracionIGIC']->model->exists());
         $this->assertCount(1, $controller->views['ListDeclaracionIGICFactura-cliente']->cursor);
         $this->assertCount(1, $controller->views['ListDeclaracionIGICFactura-proveedor']->cursor);
 
@@ -188,8 +190,8 @@ final class Modelo425ControllerTest extends TestCase
 
         // descarga de una declaración inexistente
         $this->request(['action' => 'download-atc'], ['code' => 999999]);
-        $html = $this->runController(new EditDeclaracionIGIC('EditDeclaracionIGIC'));
-        $this->assertStringNotContainsString('<DECLARACION>', $html);
+        $contenido = $this->runController(new EditDeclaracionIGIC('EditDeclaracionIGIC'));
+        $this->assertStringNotContainsString('begin', $contenido);
     }
 
     private function contar425(string $codejercicio): int
