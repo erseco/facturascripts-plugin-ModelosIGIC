@@ -23,10 +23,11 @@
                     <a href="{{ fsc.url() }}" class="btn btn-outline-secondary">
                         <i class="fa-solid fa-arrow-left fa-fw"></i> {{ i18n.trans('volver') }}
                     </a>
-                    {% if fsc.declaracion %}
-                        <a href="{{ fsc.url() }}?id={{ fsc.selectedRegiva.idregiva }}&download-atc=1" class="btn btn-primary">
+                    {% if fsc.ficheroATCDisponible() %}
+                        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalFicheroATC">
                             <i class="fa-solid fa-download fa-fw"></i> {{ i18n.trans('descargar-atc') }}
-                        </a>
+                            <span class="badge bg-warning text-dark">{{ i18n.trans('experimental') }}</span>
+                        </button>
                     {% endif %}
                     {% if fsc.allowDelete %}
                         <form action="{{ fsc.url() }}?id={{ fsc.selectedRegiva.idregiva }}" method="post" class="d-inline"
@@ -589,5 +590,8 @@
                 </div>
             </div>
         </div>
+    {% endif %}
+    {% if fsc.ficheroATCDisponible() %}
+        {% include 'Block/FicheroATC.html.twig' %}
     {% endif %}
 {% endblock %}

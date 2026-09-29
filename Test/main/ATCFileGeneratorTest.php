@@ -10,373 +10,261 @@
  * License, or (at your option) any later version.
  */
 
-namespace FacturaScripts\Test\Plugins\ModelosIGIC;
+namespace FacturaScripts\Test\Plugins;
 
 use FacturaScripts\Plugins\ModelosIGIC\Lib\ATCFileGenerator;
+use FacturaScripts\Plugins\ModelosIGIC\Model\DeclaracionIGIC;
 use PHPUnit\Framework\TestCase;
-use ReflectionClass;
+use RuntimeException;
 
 /**
- * Tests para la clase ATCFileGenerator.
+ * Fichero del Modelo 420 para el programa de ayuda de la ATC.
  *
- * El formato del fichero ATC (.dec) para presentacion telematica es:
- * XML -> comprimido con zlib (gzdeflate) -> codificado en uuencode
+ * Las reglas proceden del programa de ayuda oficial (pa-mod420.jar); ver doc/NORMATIVA.md,
+ * «Formato del fichero».
  */
-class ATCFileGeneratorTest extends TestCase
+final class ATCFileGeneratorTest extends TestCase
 {
-    private ReflectionClass $reflection;
-
-    protected function setUp(): void
-    {
-        $this->reflection = new ReflectionClass(ATCFileGenerator::class);
-    }
-
-    // =========================================================================
-    // CLASS STRUCTURE TESTS
-    // =========================================================================
-
-    public function testClassExists(): void
-    {
-        $this->assertTrue(
-            class_exists(ATCFileGenerator::class),
-            'ATCFileGenerator class should exist'
-        );
-    }
-
-    public function testCorrectNamespace(): void
-    {
-        $this->assertEquals(
-            'FacturaScripts\\Plugins\\ModelosIGIC\\Lib',
-            $this->reflection->getNamespaceName(),
-            'ATCFileGenerator should be in correct namespace'
-        );
-    }
-
-    // =========================================================================
-    // METHOD EXISTENCE TESTS
-    // =========================================================================
-
-    public function testGenerateMethodExists(): void
-    {
-        $this->assertTrue(
-            method_exists(ATCFileGenerator::class, 'generate'),
-            'generate method should exist'
-        );
-    }
-
-    public function testSaveToFileMethodExists(): void
-    {
-        $this->assertTrue(
-            method_exists(ATCFileGenerator::class, 'saveToFile'),
-            'saveToFile method should exist'
-        );
-    }
-
-    public function testGetFilenameMethodExists(): void
-    {
-        $this->assertTrue(
-            method_exists(ATCFileGenerator::class, 'getFilename'),
-            'getFilename method should exist'
-        );
-    }
-
-    public function testDecodeMethodExists(): void
-    {
-        $this->assertTrue(
-            method_exists(ATCFileGenerator::class, 'decode'),
-            'decode static method should exist'
-        );
-    }
-
-    public function testSetDesgloseVentasMethodExists(): void
-    {
-        $this->assertTrue(
-            method_exists(ATCFileGenerator::class, 'setDesgloseVentas'),
-            'setDesgloseVentas method should exist'
-        );
-    }
-
-    public function testSetDesgloseComprasMethodExists(): void
-    {
-        $this->assertTrue(
-            method_exists(ATCFileGenerator::class, 'setDesgloseCompras'),
-            'setDesgloseCompras method should exist'
-        );
-    }
-
-    // =========================================================================
-    // METHOD VISIBILITY TESTS
-    // =========================================================================
-
-    public function testGenerateIsPublic(): void
-    {
-        $method = $this->reflection->getMethod('generate');
-        $this->assertTrue($method->isPublic(), 'generate should be public');
-    }
-
-    public function testDecodeIsPublicAndStatic(): void
-    {
-        $method = $this->reflection->getMethod('decode');
-        $this->assertTrue($method->isPublic(), 'decode should be public');
-        $this->assertTrue($method->isStatic(), 'decode should be static');
-    }
-
-    public function testGenerateXMLIsProtected(): void
-    {
-        $method = $this->reflection->getMethod('generateXML');
-        $this->assertTrue($method->isProtected(), 'generateXML should be protected');
-    }
-
-    public function testCompressZlibIsProtected(): void
-    {
-        $method = $this->reflection->getMethod('compressZlib');
-        $this->assertTrue($method->isProtected(), 'compressZlib should be protected');
-    }
-
-    public function testEncodeUuencodeIsProtected(): void
-    {
-        $method = $this->reflection->getMethod('encodeUuencode');
-        $this->assertTrue($method->isProtected(), 'encodeUuencode should be protected');
-    }
-
-    // =========================================================================
-    // RETURN TYPE TESTS
-    // =========================================================================
-
-    public function testGenerateReturnsString(): void
-    {
-        $method = $this->reflection->getMethod('generate');
-        $returnType = $method->getReturnType();
-        $this->assertNotNull($returnType, 'generate should have return type');
-        $this->assertEquals('string', $returnType->getName());
-    }
-
-    public function testSaveToFileReturnsString(): void
-    {
-        $method = $this->reflection->getMethod('saveToFile');
-        $returnType = $method->getReturnType();
-        $this->assertNotNull($returnType, 'saveToFile should have return type');
-        $this->assertEquals('string', $returnType->getName());
-    }
-
-    public function testGetFilenameReturnsString(): void
-    {
-        $method = $this->reflection->getMethod('getFilename');
-        $returnType = $method->getReturnType();
-        $this->assertNotNull($returnType, 'getFilename should have return type');
-        $this->assertEquals('string', $returnType->getName());
-    }
-
-    public function testDecodeReturnsString(): void
-    {
-        $method = $this->reflection->getMethod('decode');
-        $returnType = $method->getReturnType();
-        $this->assertNotNull($returnType, 'decode should have return type');
-        $this->assertEquals('string', $returnType->getName());
-    }
-
-    // =========================================================================
-    // ENCODE/DECODE TESTS
-    // =========================================================================
-
     /**
-     * Test que verifica que el proceso de codificacion/decodificacion es reversible.
+     * Importes con dos decimales implícitos: ConversorNumerico.numberToImpType().
      */
-    public function testEncodeDecodeIsReversible(): void
+    public function testImporteSinPuntoDecimal(): void
     {
-        // XML de ejemplo
-        $xml = '<?xml version="1.0" encoding="ISO-8859-1"?>' . "\n"
-            . '<DECLARACION><CABECERA><TIPO>DEC</TIPO></CABECERA></DECLARACION>';
-
-        // Simular el proceso de codificacion
-        $compressed = gzdeflate($xml, 9);
-        $encoded = convert_uuencode($compressed);
-
-        // Decodificar
-        $decoded = ATCFileGenerator::decode($encoded);
-
-        $this->assertEquals($xml, $decoded, 'Decoded XML should match original');
+        $this->assertSame('7000', ATCFileGenerator::importe(70.0));
+        $this->assertSame('000', ATCFileGenerator::importe(0.0));
+        $this->assertSame('000', ATCFileGenerator::importe(-0.001));
+        $this->assertSame('005', ATCFileGenerator::importe(0.05));
+        $this->assertSame('-1250', ATCFileGenerator::importe(-12.5));
+        $this->assertSame('950', ATCFileGenerator::importe(9.5));
+        $this->assertSame('123457', ATCFileGenerator::importe(1234.567));
     }
 
     /**
-     * Test que verifica que el fichero generado usa la extension del formato seleccionado
+     * Período del esquema (DEC/@PER): 1T–4T.
      */
-    public function testFilenameUsesFormatExtension(): void
+    public function testPeriodo(): void
     {
-        // Verificar que getFilename usa $this->format para la extension
-        $sourceCode = file_get_contents($this->reflection->getFileName());
-
-        $this->assertStringContainsString(
-            '$this->format',
-            $sourceCode,
-            'Filename should use $this->format for extension'
-        );
+        $this->assertSame('1T', ATCFileGenerator::periodo('T1'));
+        $this->assertSame('4T', ATCFileGenerator::periodo('T4'));
+        $this->assertSame('ANUAL', ATCFileGenerator::periodo('ANUAL'));
     }
 
-    // =========================================================================
-    // XML STRUCTURE TESTS (via reflection)
-    // =========================================================================
-
-    public function testGenerateXMLCreatesValidStructure(): void
+    /**
+     * Caracteres admitidos por el programa (DatosPersonales/Direccion, enum Campos).
+     */
+    public function testTextoNormalizado(): void
     {
-        // Verificar que el metodo generateXML existe y tiene la estructura esperada
-        $method = $this->reflection->getMethod('generateXML');
-        $this->assertTrue($method->isProtected());
-
-        // Leer el codigo fuente para verificar elementos XML esperados
-        $sourceCode = file_get_contents($this->reflection->getFileName());
-
-        // Verificar elementos principales del XML
-        $this->assertStringContainsString('DECLARACION', $sourceCode);
-        $this->assertStringContainsString('CABECERA', $sourceCode);
-        $this->assertStringContainsString('SUJETO', $sourceCode);
-        $this->assertStringContainsString('IVA_DEVENGADO', $sourceCode);
-        $this->assertStringContainsString('IVA_DEDUCIBLE', $sourceCode);
-        $this->assertStringContainsString('RESULTADO', $sourceCode);
+        $this->assertSame('PEPITA GOMEZ, S.L.', ATCFileGenerator::texto(' Pepita  Gómez, S.L. ', 75));
+        $this->assertSame('ÑANDU', ATCFileGenerator::texto('ñandú', 75));
+        $this->assertSame('CALLE 1 2', ATCFileGenerator::texto('Calle 1º/2ª', 75));
+        $this->assertSame('ABC', ATCFileGenerator::texto('abcdef', 3));
+        $this->assertTrue(ATCFileGenerator::esPersonaFisica('12345678Z'));
+        $this->assertTrue(ATCFileGenerator::esPersonaFisica('X1234567L'));
+        $this->assertFalse(ATCFileGenerator::esPersonaFisica('B00000000'));
     }
 
-    public function testXMLContainsMandatoryFields(): void
+    /**
+     * UUEncoder/UUDecoder del programa: líneas de 45 bytes y el cero escrito como «`».
+     */
+    public function testUuencode(): void
     {
-        $sourceCode = file_get_contents($this->reflection->getFileName());
+        $this->assertSame('', ATCFileGenerator::uuencode(''));
+        $this->assertSame("#86)C\n", ATCFileGenerator::uuencode('abc'));
+        $this->assertSame("!````\n", ATCFileGenerator::uuencode("\0"));
 
-        // Campos obligatorios de la cabecera
-        $this->assertStringContainsString('TIPO', $sourceCode);
-        $this->assertStringContainsString('MODELO', $sourceCode);
-        $this->assertStringContainsString('EJERCICIO', $sourceCode);
-        $this->assertStringContainsString('PERIODO', $sourceCode);
-        $this->assertStringContainsString('VERSION', $sourceCode);
-
-        // Campos del sujeto pasivo
-        $this->assertStringContainsString('NIF', $sourceCode);
-        $this->assertStringContainsString('NOMBRE', $sourceCode);
-        $this->assertStringContainsString('PROVINCIA', $sourceCode);
-        $this->assertStringContainsString('MUNICIPIO', $sourceCode);
-        $this->assertStringContainsString('CODIGO_POSTAL', $sourceCode);
+        $datos = random_bytes(200);
+        $codificado = ATCFileGenerator::uuencode($datos);
+        $lineas = explode("\n", rtrim($codificado, "\n"));
+        $this->assertCount(5, $lineas);
+        $this->assertSame('M', $lineas[0][0]);
+        $this->assertSame(chr(20 + 32), $lineas[4][0]);
+        $this->assertSame($datos, ATCFileGenerator::uudecode($codificado));
+        $this->assertSame($datos, ATCFileGenerator::uudecode(str_replace("\n", "\r\n", $codificado) . "`\n"));
     }
 
-    // =========================================================================
-    // FIXTURE VALIDATION TESTS
-    // =========================================================================
-
-    public function testFixtureFilesAreValidDEC(): void
+    public function testCodificarYDecodificar(): void
     {
-        // Los fixtures viajan con el plugin; los tests se copian a Test/Plugins del núcleo.
-        $fixturesDir = FS_FOLDER . '/Plugins/ModelosIGIC/Test/fixtures/';
+        $xml = '<?xml version="1.0" encoding="ISO-8859-1"?>' . "\n<DEC MOD=\"420\"/>\n";
+        $this->assertSame($xml, ATCFileGenerator::decodificar(ATCFileGenerator::codificar($xml)));
 
-        if (!is_dir($fixturesDir)) {
-            $this->markTestSkipped('Fixtures directory not found: ' . $fixturesDir);
-            return;
+        $this->expectException(RuntimeException::class);
+        ATCFileGenerator::decodificar(ATCFileGenerator::uuencode('no es zlib'));
+    }
+
+    public function testFicheroAIngresar(): void
+    {
+        [$periodo, $casillas, $datos] = EjemplosFicheroATC::casos()['ingresar'];
+        $generator = $this->generator($periodo, $casillas, $datos);
+        $this->assertSame([], $generator->validar());
+        $this->assertSame('I', $generator->tipoResultado());
+        $this->assertEqualsWithDelta(480.0, $generator->resultado(), 0.001);
+        $this->assertMatchesRegularExpression('/^B00000000-\d+\.atc$/', $generator->getFilename());
+
+        $dec = simplexml_load_string(ATCFileGenerator::decodificar($generator->generate()));
+        $this->assertSame('DEC', $dec->getName());
+        $this->assertSame(['420', '2026', '1T', '9.3.0'], [
+            (string) $dec['MOD'], (string) $dec['ANY'], (string) $dec['PER'], (string) $dec['VER'],
+        ]);
+        $otp = $dec->IDE->OTP;
+        $this->assertSame('EMPRESA DE EJEMPLO CANARIAS, S.L.', (string) $otp['NRS']);
+        $this->assertSame(['SP', 'CL', '35', '35016', '35001', 'ES'], [
+            (string) $otp['TPE'], (string) $otp['SVP'], (string) $otp['POP'], (string) $otp['CMU'],
+            (string) $otp['CP'], (string) $otp['PAI'],
+        ]);
+        $this->assertCount(2, $dec->IGI_DEV->DEV);
+        $this->assertSame(['200000', '300', '6000'], [
+            (string) $dec->IGI_DEV->DEV[0]['BAS'],
+            (string) $dec->IGI_DEV->DEV[0]['TIP'],
+            (string) $dec->IGI_DEV->DEV[0]['CUO'],
+        ]);
+        $this->assertSame('76000', (string) $dec->IGI_DEV['TOT']);
+        $this->assertSame('400000', (string) $dec->IGI_DED->OIC['BAS']);
+        $this->assertSame('28000', (string) $dec->IGI_DED['TOT']);
+        $this->assertSame('48000', (string) $dec->LIQ['DIF']);
+        $this->assertSame('48000', (string) $dec->LIQ['RLI']);
+        $this->assertSame(['I', '48000', '5'], [
+            (string) $dec->RES['TIP'], (string) $dec->RES['IMP'], (string) $dec->RES['FPA'],
+        ]);
+        $this->assertFalse(isset($dec->RES['IBAN']));
+        $this->assertFalse(isset($dec['COM']));
+        $this->assertFalse(isset($dec->ADI));
+    }
+
+    public function testFicheroACompensarConCasillasManuales(): void
+    {
+        [$periodo, $casillas, $datos] = EjemplosFicheroATC::casos()['compensar'];
+        $generator = $this->generator($periodo, $casillas, $datos + [
+            'c42' => '10', 'c43' => '5.5', 'c44' => '0', 'c46' => '100', 'c47' => '',
+            'complementaria' => true, 'nja' => '4200000000001',
+        ]);
+        $this->assertSame([], $generator->validar());
+        // 41 + 42 - 43 - 44 = -140 + 10 - 5,50
+        $this->assertEqualsWithDelta(-135.5, $generator->resultado(), 0.001);
+        $this->assertSame('C', $generator->tipoResultado());
+
+        $dec = simplexml_load_string($generator->generarXML());
+        $this->assertSame(['X', '4200000000001'], [(string) $dec['COM'], (string) $dec['NJA']]);
+        $this->assertSame(['-14000', '1000', '550', '-13550'], [
+            (string) $dec->LIQ['DIF'], (string) $dec->LIQ['RCU'], (string) $dec->LIQ['CPA'], (string) $dec->LIQ['RLI'],
+        ]);
+        $this->assertFalse(isset($dec->LIQ['DAC']));
+        $this->assertSame(['C', '13550'], [(string) $dec->RES['TIP'], (string) $dec->RES['IMP']]);
+        $this->assertSame('10000', (string) $dec->ADI['EOA']);
+        $this->assertFalse(isset($dec->ADI['ODD']));
+    }
+
+    public function testFicheroADevolverYSinActividad(): void
+    {
+        [$periodo, $casillas, $datos] = EjemplosFicheroATC::casos()['devolver'];
+        $generator = $this->generator($periodo, $casillas, $datos);
+        $this->assertSame([], $generator->validar());
+        $dec = simplexml_load_string($generator->generarXML());
+        $this->assertSame(['D', '14000', 'ES9121000418450200051332'], [
+            (string) $dec->RES['TIP'], (string) $dec->RES['IMP'], (string) $dec->RES['IBAN'],
+        ]);
+        $this->assertSame('000', (string) $dec->IGI_DEV->DEV[0]['TIP']);
+
+        [$periodo, $casillas, $datos] = EjemplosFicheroATC::casos()['sin-actividad'];
+        $generator = $this->generator($periodo, $casillas, $datos);
+        $this->assertSame('S', $generator->tipoResultado());
+        $dec = simplexml_load_string($generator->generarXML());
+        $this->assertSame('S', (string) $dec->RES['TIP']);
+        $this->assertFalse(isset($dec->RES['IMP']));
+        $this->assertFalse(isset($dec->LIQ));
+        $this->assertFalse(isset($dec->IGI_DEV));
+
+        // con una casilla manual deja de ser «sin actividad»
+        $generator->setDatos($datos + ['c43' => '20']);
+        $this->assertSame('C', $generator->tipoResultado());
+    }
+
+    public function testValidacionDatosDelDeclarante(): void
+    {
+        [$periodo, $casillas] = EjemplosFicheroATC::casos()['ingresar'];
+        $errores = $this->generator($periodo, $casillas, [
+            'nif' => 'B0', 'svp' => 'ZZ', 'pop' => '38', 'cmu' => '35016', 'cp' => '350', 'npk' => '12A',
+            'esc' => 'ABC', 'pis' => '123', 'pue' => '12345', 'tel' => '12-34', 'complementaria' => true,
+            'nja' => '12',
+        ])->validar();
+
+        foreach (['nif', 'nrs', 'svp', 'nvp', 'cp', 'npk', 'esc', 'pis', 'pue', 'tel', 'nja', 'fpa'] as $campo) {
+            $this->assertContains('fichero-atc-campo-' . $campo, $errores, $campo);
         }
+        $this->assertContains('fichero-atc-municipio-provincia', $errores);
+    }
 
-        $decFiles = glob($fixturesDir . '*.dec');
-        $this->assertNotEmpty($decFiles, 'Should have at least one .dec fixture file');
+    public function testValidacionResultadoYTipos(): void
+    {
+        [, $casillas, $datos] = EjemplosFicheroATC::casos()['devolver'];
 
-        foreach ($decFiles as $fixturePath) {
-            $content = file_get_contents($fixturePath);
-            $this->assertNotEmpty($content, 'Fixture file should not be empty: ' . basename($fixturePath));
+        // la devolución solo en el 4T; el IBAN es obligatorio
+        $errores = $this->generator('T2', $casillas, ['iban' => 'ES12'] + $datos)->validar();
+        $this->assertContains('fichero-atc-devolucion-solo-4t', $errores);
+        $this->assertContains('fichero-atc-campo-iban', $errores);
 
-            // Intentar decodificar
-            try {
-                $xml = ATCFileGenerator::decode($content);
-                $this->assertStringContainsString(
-                    '<?xml',
-                    $xml,
-                    'Decoded content should be XML: ' . basename($fixturePath)
-                );
-                $this->assertStringContainsString(
-                    'DECLARACION',
-                    $xml,
-                    'XML should contain DECLARACION element: ' . basename($fixturePath)
-                );
-            } catch (\Exception $e) {
-                $this->fail(
-                    'Fixture file should be valid .dec format: ' . basename($fixturePath)
-                    . ' - ' . $e->getMessage()
-                );
-            }
+        // domiciliación sin IBAN
+        [, $casillasIngreso] = EjemplosFicheroATC::casos()['ingresar'];
+        $errores = $this->generator('T1', $casillasIngreso, ['fpa' => '4'] + EjemplosFicheroATC::SUJETO)->validar();
+        $this->assertSame(['fichero-atc-campo-iban'], $errores);
+
+        // tipo que no figura en la lista del programa (TiposGravamen.txt)
+        $filas = [['tipo' => 6.5, 'base' => 100.0, 'cuota' => 6.5]];
+        $errores = $this->ingreso($filas)->validar();
+        $this->assertSame(['fichero-atc-tipo-no-admitido'], $errores);
+
+        // el programa de 2025 no tiene el tipo del 1 % ni las filas 16b y 16c
+        $filas = [['tipo' => 1.0, 'base' => 100.0, 'cuota' => 1.0]];
+        $this->assertSame(['fichero-atc-tipo-no-admitido'], $this->ingreso($filas, '2025-01-01')->validar());
+
+        $filas = [];
+        foreach ([0, 3, 5, 7, 9.5, 15, 20] as $tipo) {
+            $filas[] = ['tipo' => (float) $tipo, 'base' => 100.0, 'cuota' => $tipo];
         }
+        $this->assertSame(['fichero-atc-demasiados-tipos'], $this->ingreso($filas, '2025-01-01')->validar());
+        $this->assertSame([], $this->ingreso($filas)->validar());
     }
 
-    // =========================================================================
-    // PERIOD CONVERSION TESTS
-    // =========================================================================
-
-    public function testPeriodoConversionPatterns(): void
+    public function testSoloModelo420DeEjerciciosConPrograma(): void
     {
-        $sourceCode = file_get_contents($this->reflection->getFileName());
+        [$periodo, $casillas, $datos] = EjemplosFicheroATC::casos()['ingresar'];
+        $generator = $this->generator($periodo, $casillas, $datos, '2024-01-01');
+        $this->assertSame(['fichero-atc-ejercicio-no-soportado'], $generator->validar());
 
-        // Verificar que maneja los formatos T1, T2, T3, T4 y 1T, 2T, 3T, 4T
-        $this->assertStringContainsString('[1-4]T', $sourceCode);
-        $this->assertStringContainsString('T([1-4])', $sourceCode);
-        $this->assertStringContainsString('0A', $sourceCode, 'Should handle annual period (0A)');
+        $generator = $this->generator($periodo, $casillas, $datos);
+        $generator->setDatos([]);
+        $this->expectException(RuntimeException::class);
+        $generator->generate();
     }
 
-    // =========================================================================
-    // CANARY ISLANDS PROVINCE CODES TESTS
-    // =========================================================================
-
-    public function testCanaryIslandsProvinceCodes(): void
+    public function testModelo425NoTieneFichero(): void
     {
-        $sourceCode = file_get_contents($this->reflection->getFileName());
-
-        // Las Palmas = 35, Santa Cruz de Tenerife = 38
-        $this->assertStringContainsString("'35'", $sourceCode, 'Should have Las Palmas code (35)');
-        $this->assertStringContainsString("'38'", $sourceCode, 'Should have Tenerife code (38)');
+        $declaracion = new DeclaracionIGIC();
+        $declaracion->tipo = '425';
+        $declaracion->periodo = 'ANUAL';
+        $declaracion->fechainicio = '2026-01-01';
+        $this->assertSame(['fichero-atc-solo-420'], (new ATCFileGenerator($declaracion))->validar());
     }
 
-    // =========================================================================
-    // CONSTANTS TESTS
-    // =========================================================================
-
-    public function testVersionConstantExists(): void
+    /**
+     * Declaración del 1T a ingresar, pagada en efectivo, con las filas de devengado indicadas.
+     */
+    private function ingreso(array $filas, string $inicio = '2026-01-01'): ATCFileGenerator
     {
-        $this->assertTrue(
-            $this->reflection->hasConstant('VERSION'),
-            'VERSION constant should exist'
-        );
+        $casillas = EjemplosFicheroATC::casillas($filas, 0, 0, 'I');
+        return $this->generator('T1', $casillas, ['fpa' => '1'] + EjemplosFicheroATC::SUJETO, $inicio);
     }
 
-    // =========================================================================
-    // FORMAT CONSTANTS AND METHODS TESTS
-    // =========================================================================
+    private function generator(
+        string $periodo,
+        array $casillas,
+        array $datos,
+        string $inicio = '2026-01-01'
+    ): ATCFileGenerator {
+        $declaracion = new DeclaracionIGIC();
+        $declaracion->tipo = '420';
+        $declaracion->periodo = $periodo;
+        $declaracion->fechainicio = $inicio;
 
-    public function testFormatConstantsExist(): void
-    {
-        $this->assertTrue(
-            $this->reflection->hasConstant('FORMAT_DEC'),
-            'FORMAT_DEC constant should exist'
-        );
-        $this->assertTrue(
-            $this->reflection->hasConstant('FORMAT_ATC'),
-            'FORMAT_ATC constant should exist'
-        );
-
-        $this->assertEquals('dec', ATCFileGenerator::FORMAT_DEC);
-        $this->assertEquals('atc', ATCFileGenerator::FORMAT_ATC);
-    }
-
-    public function testSetFormatMethodExists(): void
-    {
-        $this->assertTrue(
-            $this->reflection->hasMethod('setFormat'),
-            'setFormat method should exist'
-        );
-
-        $this->assertTrue(
-            $this->reflection->hasMethod('getFormat'),
-            'getFormat method should exist'
-        );
-    }
-
-    public function testDefaultFormatIsDEC(): void
-    {
-        $formatProperty = $this->reflection->getProperty('format');
-        $formatProperty->setAccessible(true);
-
-        $this->assertEquals(
-            ATCFileGenerator::FORMAT_DEC,
-            $formatProperty->getDefaultValue(),
-            'Default format should be DEC'
-        );
+        return (new ATCFileGenerator($declaracion))->setCasillas($casillas)->setDatos($datos);
     }
 }

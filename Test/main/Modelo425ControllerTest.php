@@ -17,7 +17,6 @@ use FacturaScripts\Core\Where;
 use FacturaScripts\Plugins\ModelosIGIC\Controller\EditDeclaracionIGIC;
 use FacturaScripts\Plugins\ModelosIGIC\Controller\ListDeclaracionIGIC;
 use FacturaScripts\Plugins\ModelosIGIC\Controller\Modelo425;
-use FacturaScripts\Plugins\ModelosIGIC\Lib\ATCFileGenerator;
 use FacturaScripts\Plugins\ModelosIGIC\Lib\RegularizacionIGIC;
 use FacturaScripts\Plugins\ModelosIGIC\Model\DeclaracionIGIC;
 use PHPUnit\Framework\TestCase;
@@ -202,17 +201,25 @@ final class Modelo425ControllerTest extends TestCase
         $this->assertCount(1, $controller->views['ListDeclaracionIGICFactura-cliente']->cursor);
         $this->assertCount(1, $controller->views['ListDeclaracionIGICFactura-proveedor']->cursor);
 
-        // descarga del fichero
+        // el fichero lleva al Modelo 420 de la declaración
         $this->request(['action' => 'download-atc'], ['code' => $declaracion->idmodelo]);
         $controller = new EditDeclaracionIGIC('EditDeclaracionIGIC');
-        $contenido = $this->runController($controller);
-        $xml = simplexml_load_string(ATCFileGenerator::decode($contenido));
-        $this->assertSame('420', (string) $xml->CABECERA->MODELO);
+        $this->runController($controller);
+        $refresh = $this->ultimaRespuesta->headers->get('Refresh');
+        $this->assertStringContainsString('Modelo420?id=' . $regiva->idregiva, $refresh);
+
+        // el 425 no tiene fichero
+        $declaracion->tipo = '425';
+        $declaracion->periodo = 'ANUAL';
+        $this->assertTrue($declaracion->save());
+        $this->request(['action' => 'download-atc'], ['code' => $declaracion->idmodelo]);
+        $this->runController(new EditDeclaracionIGIC('EditDeclaracionIGIC'));
+        $this->assertStringContainsString(Tools::lang()->trans('fichero-atc-solo-420'), $this->recentLog());
 
         // descarga de una declaración inexistente
         $this->request(['action' => 'download-atc'], ['code' => 999999]);
-        $contenido = $this->runController(new EditDeclaracionIGIC('EditDeclaracionIGIC'));
-        $this->assertStringNotContainsString('begin', $contenido);
+        $this->runController(new EditDeclaracionIGIC('EditDeclaracionIGIC'));
+        $this->assertStringContainsString(Tools::lang()->trans('record-not-found'), $this->recentLog());
     }
 
     private function contar425(string $codejercicio): int

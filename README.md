@@ -9,8 +9,8 @@
 
 **Modelo 420** (autoliquidación trimestral del IGIC) y **Modelo 425** (declaración-resumen anual
 del IGIC) de la **Agencia Tributaria Canaria (ATC)** para FacturaScripts. Calcula el IGIC
-devengado y deducible a partir de las facturas, genera el asiento de regularización y el fichero
-para la presentación telemática.
+devengado y deducible a partir de las facturas, genera el asiento de regularización y un fichero
+del Modelo 420 para importar en el programa de ayuda de la ATC (experimental).
 
 <p align="center">
   <img src=".github/screenshot.png" alt="Regularización del Modelo 420 con el desglose del IGIC y el asiento generado" width="700">
@@ -42,8 +42,10 @@ licencia AGPL-3.0 y los créditos de los autores originales.
 - **Historial de declaraciones** con su estado (borrador, presentado, rectificado), número de
   referencia de la ATC, fecha de presentación y facturas incluidas.
 - **Declaraciones rectificativas** a partir de una declaración ya presentada.
-- **Fichero para la ATC**: descarga del fichero `.dec` para la presentación telemática en la
-  sede electrónica.
+- **Fichero para el programa de ayuda** (experimental): fichero `.atc` del Modelo 420 con el
+  formato del programa de ayuda oficial de la ATC (ejercicios 2025 y 2026). Se importa en el
+  programa, que lo valida y desde el que se presenta. Ver
+  [`doc/VALIDAR_FICHERO_ATC.md`](doc/VALIDAR_FICHERO_ATC.md).
 
 ## Uso
 
@@ -54,8 +56,10 @@ licencia AGPL-3.0 y los créditos de los autores originales.
    **Calcular** para ver la previsualización del asiento.
 3. Pulsa **Guardar** para crear la regularización, el asiento contable y la declaración en
    borrador. Todo se guarda en una sola transacción: si algo falla no queda nada a medias.
-4. Descarga el fichero `.dec` y preséntalo en la
-   [sede electrónica de la ATC](https://sede.gobiernodecanarias.org/tributos/).
+4. Pulsa **Fichero para el programa de ayuda**, completa los datos que pide (dirección fiscal,
+   casillas que el plugin no calcula, forma de pago) y descarga el `.atc`. Impórtalo en el
+   programa de ayuda del 420, revísalo y presenta la declaración desde allí.
+   **Experimental**: todavía no se ha usado para presentar una declaración real.
 5. Marca la declaración como **presentada** indicando el número de referencia de la ATC.
 
 ### Modelo 425

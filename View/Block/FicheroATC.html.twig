@@ -1,0 +1,155 @@
+{#
+    Formulario del fichero para importar en el programa de ayuda del Modelo 420 (EXPERIMENTAL).
+    Formato y validaciones: Lib/ATCFileGenerator.php y doc/NORMATIVA.md, «Formato del fichero».
+#}
+{% set datos = fsc.datosFichero() %}
+{% set casillas = fsc.casillas() %}
+<div class="modal fade" id="modalFicheroATC" tabindex="-1" aria-labelledby="modalFicheroATCLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form action="{{ fsc.url() }}?id={{ fsc.selectedRegiva.idregiva }}" method="post">
+                {{ formToken() }}
+                <input type="hidden" name="proceso" value="descargar-atc">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modalFicheroATCLabel">
+                        <i class="fa-solid fa-download fa-fw"></i> {{ i18n.trans('fichero-atc-titulo') }}
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-warning">
+                        <i class="fa-solid fa-flask fa-fw"></i>
+                        <strong>{{ i18n.trans('experimental') }}.</strong> {{ i18n.trans('fichero-atc-experimental') }}
+                    </div>
+                    <p class="small text-muted">{{ i18n.trans('fichero-atc-ayuda') }}</p>
+
+                    <h6>{{ i18n.trans('fichero-atc-sujeto-pasivo') }}</h6>
+                    <div class="row g-2 mb-3">
+                        <div class="col-md-3">
+                            <label class="form-label" for="atc-nif">NIF</label>
+                            <input type="text" class="form-control" id="atc-nif" name="nif" maxlength="9" required value="{{ datos.nif ?? '' }}">
+                        </div>
+                        <div class="col-md-9">
+                            <label class="form-label" for="atc-nrs">{{ i18n.trans('fichero-atc-nrs') }}</label>
+                            <input type="text" class="form-control text-uppercase" id="atc-nrs" name="nrs" maxlength="75" required value="{{ datos.nrs ?? '' }}">
+                            <div class="form-text">{{ i18n.trans('fichero-atc-nrs-ayuda') }}</div>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label" for="atc-svp">{{ i18n.trans('fichero-atc-svp') }}</label>
+                            <select class="form-select" id="atc-svp" name="svp" required>
+                                <option value="">------</option>
+                                {% for codigo, nombre in fsc.siglasVia() %}
+                                    <option value="{{ codigo }}" {% if (datos.svp ?? '') == codigo %}selected{% endif %}>{{ codigo }} - {{ nombre }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-5">
+                            <label class="form-label" for="atc-nvp">{{ i18n.trans('fichero-atc-nvp') }}</label>
+                            <input type="text" class="form-control text-uppercase" id="atc-nvp" name="nvp" maxlength="50" required value="{{ datos.nvp ?? '' }}">
+                        </div>
+                        <div class="col-md-1">
+                            <label class="form-label" for="atc-npk">{{ i18n.trans('numero') }}</label>
+                            <input type="text" class="form-control" id="atc-npk" name="npk" maxlength="5" pattern="[0-9]*" value="{{ datos.npk ?? '' }}">
+                        </div>
+                        <div class="col-md-1">
+                            <label class="form-label" for="atc-esc">{{ i18n.trans('fichero-atc-esc') }}</label>
+                            <input type="text" class="form-control text-uppercase" id="atc-esc" name="esc" maxlength="2" value="{{ datos.esc ?? '' }}">
+                        </div>
+                        <div class="col-md-1">
+                            <label class="form-label" for="atc-pis">{{ i18n.trans('fichero-atc-pis') }}</label>
+                            <input type="text" class="form-control text-uppercase" id="atc-pis" name="pis" maxlength="2" value="{{ datos.pis ?? '' }}">
+                        </div>
+                        <div class="col-md-1">
+                            <label class="form-label" for="atc-pue">{{ i18n.trans('fichero-atc-pue') }}</label>
+                            <input type="text" class="form-control text-uppercase" id="atc-pue" name="pue" maxlength="4" value="{{ datos.pue ?? '' }}">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label" for="atc-pop">{{ i18n.trans('fichero-atc-pop') }}</label>
+                            <input type="text" class="form-control" id="atc-pop" name="pop" maxlength="2" pattern="[0-9]{2}" required value="{{ datos.pop ?? '' }}">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label" for="atc-cmu">{{ i18n.trans('fichero-atc-cmu') }}</label>
+                            <input type="text" class="form-control" id="atc-cmu" name="cmu" maxlength="5" pattern="[0-9]{5}" list="atc-municipios" required value="{{ datos.cmu ?? '' }}">
+                            <datalist id="atc-municipios">
+                                {% for codigo, nombre in fsc.municipiosCanarias() %}
+                                    <option value="{{ codigo }}">{{ nombre }}</option>
+                                {% endfor %}
+                            </datalist>
+                            <div class="form-text">{{ i18n.trans('fichero-atc-cmu-ayuda') }}</div>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label" for="atc-cp">{{ i18n.trans('codigo-postal') }}</label>
+                            <input type="text" class="form-control" id="atc-cp" name="cp" maxlength="5" pattern="[0-9]{5}" required value="{{ datos.cp ?? '' }}">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label" for="atc-tel">{{ i18n.trans('telefono') }}</label>
+                            <input type="text" class="form-control" id="atc-tel" name="tel" maxlength="15" pattern="[0-9]*" value="{{ datos.tel ?? '' }}">
+                        </div>
+                    </div>
+
+                    <h6>{{ i18n.trans('fichero-atc-liquidacion') }}</h6>
+                    <p class="small text-muted">{{ i18n.trans('fichero-atc-liquidacion-ayuda') }}</p>
+                    <div class="row g-2 mb-3">
+                        {% for casilla in ['42', '43', '44', '46', '47'] %}
+                            <div class="col-md-4">
+                                <label class="form-label" for="atc-c{{ casilla }}">{{ i18n.trans('casilla') }} {{ casilla }}</label>
+                                <input type="number" step="0.01" class="form-control" id="atc-c{{ casilla }}" name="c{{ casilla }}" value="{{ datos['c' ~ casilla] ?? '' }}">
+                            </div>
+                        {% endfor %}
+                        <div class="col-md-4">
+                            <div class="form-check mt-4">
+                                <input class="form-check-input" type="checkbox" id="atc-complementaria" name="complementaria" value="1" {% if (datos.complementaria ?? false) %}checked{% endif %}>
+                                <label class="form-check-label" for="atc-complementaria">{{ i18n.trans('fichero-atc-complementaria') }}</label>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label" for="atc-nja">{{ i18n.trans('fichero-atc-nja') }}</label>
+                            <input type="text" class="form-control" id="atc-nja" name="nja" maxlength="13" pattern="[0-9]{13}" value="{{ datos.nja ?? '' }}">
+                        </div>
+                    </div>
+
+                    <h6>{{ i18n.trans('fichero-atc-resultado') }}</h6>
+                    <div class="row g-2">
+                        <div class="col-md-4">
+                            <label class="form-label" for="atc-tipo">{{ i18n.trans('fichero-atc-si-negativo') }}</label>
+                            <select class="form-select" id="atc-tipo" name="tipo">
+                                <option value="C">{{ i18n.trans('fichero-atc-compensar') }}</option>
+                                <option value="D" {% if (datos.tipo ?? '') == 'D' %}selected{% endif %}>{{ i18n.trans('fichero-atc-devolver') }}</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label" for="atc-fpa">{{ i18n.trans('fichero-atc-fpa') }}</label>
+                            <select class="form-select" id="atc-fpa" name="fpa">
+                                <option value="">------</option>
+                                {% for codigo in ['1', '2', '4', '5'] %}
+                                    <option value="{{ codigo }}" {% if (datos.fpa ?? '') == codigo %}selected{% endif %}>{{ codigo }} - {{ i18n.trans('fichero-atc-fpa-' ~ codigo) }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label" for="atc-iban">IBAN</label>
+                            <input type="text" class="form-control" id="atc-iban" name="iban" maxlength="34" value="{{ datos.iban ?? '' }}">
+                            <div class="form-text">{{ i18n.trans('fichero-atc-iban-ayuda') }}</div>
+                        </div>
+                    </div>
+                    {% if (casillas.resultado ?? '') == 'S' %}
+                        <div class="alert alert-info mt-3 mb-0">{{ i18n.trans('fichero-atc-sin-actividad') }}</div>
+                    {% endif %}
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ i18n.trans('cancelar') }}</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fa-solid fa-download fa-fw"></i> {{ i18n.trans('descargar-atc') }}
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% if fsc.datosATC is not empty %}
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('modalFicheroATC')).show();
+        });
+    </script>
+{% endif %}

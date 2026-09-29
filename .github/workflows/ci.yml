@@ -170,6 +170,18 @@ jobs:
             php Test/install-plugins.php
           fi
 
+      - name: Download the official Modelo 420 XSD
+        # The XSD files of the ATC help program are not stored in the repository. They are
+        # downloaded from the ATC website so ATCFicheroOficialTest can validate the sample files.
+        # If the website is unavailable the step is skipped and that test is marked as skipped.
+        continue-on-error: true
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/m420.zip" \
+            https://www3.gobiernodecanarias.org/tributos/atc/documents/d/agencia-tributaria-canaria/m420v930e26-zip-1
+          unzip -q -o "$RUNNER_TEMP/m420.zip" pa-mod420.jar -d "$RUNNER_TEMP"
+          unzip -q -o -j "$RUNNER_TEMP/pa-mod420.jar" 'org_grecasa_ext_pa/xsd/*' -d "$RUNNER_TEMP/xsd420"
+          echo "MODELOSIGIC_XSD_DIR=$RUNNER_TEMP/xsd420" >> "$GITHUB_ENV"
+
       - name: Run PHPUnit tests
         working-directory: facturascripts
         run: |

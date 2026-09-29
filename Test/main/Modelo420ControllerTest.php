@@ -16,7 +16,6 @@ use FacturaScripts\Core\Tools;
 use FacturaScripts\Core\Where;
 use FacturaScripts\Dinamic\Model\RegularizacionImpuesto;
 use FacturaScripts\Plugins\ModelosIGIC\Controller\Modelo420;
-use FacturaScripts\Plugins\ModelosIGIC\Lib\ATCFileGenerator;
 use FacturaScripts\Plugins\ModelosIGIC\Lib\RegularizacionIGIC;
 use FacturaScripts\Plugins\ModelosIGIC\Model\DeclaracionIGIC;
 use PHPUnit\Framework\TestCase;
@@ -142,12 +141,16 @@ final class Modelo420ControllerTest extends TestCase
         $this->runController($controller);
         $this->assertTrue($controller->declaracion->esRectificativo());
 
-        // descargar el fichero
-        $this->get(['id' => $idregiva, 'download-atc' => '1']);
+        // no hay programa de ayuda para el ejercicio de pruebas: no se ofrece el fichero
+        $this->assertFalse($controller->ficheroATCDisponible());
+        $this->post(['proceso' => 'descargar-atc', 'multireqtoken' => $this->formToken()], ['id' => $idregiva]);
         $controller = new Modelo420('Modelo420', '/Modelo420');
-        $contenido = $this->runController($controller);
-        $xml = simplexml_load_string(ATCFileGenerator::decode($contenido));
-        $this->assertSame('70.00', (string) $xml->IVA_DEVENGADO->TOTAL_CUOTA);
+        $html = $this->runController($controller);
+        $this->assertStringNotContainsString('modalFicheroATC', $html);
+        $this->assertStringContainsString(
+            Tools::lang()->trans('fichero-atc-ejercicio-no-soportado'),
+            $this->recentLog()
+        );
     }
 
     public function testGuardarSinTokenNoHaceNada(): void

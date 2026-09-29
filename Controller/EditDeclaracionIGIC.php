@@ -23,8 +23,6 @@ namespace FacturaScripts\Plugins\ModelosIGIC\Controller;
 use FacturaScripts\Core\Lib\ExtendedController\EditController;
 use FacturaScripts\Core\Tools;
 use FacturaScripts\Core\Where;
-use FacturaScripts\Plugins\ModelosIGIC\Lib\ATCFileGenerator;
-use FacturaScripts\Plugins\ModelosIGIC\Lib\IGICHelper;
 use FacturaScripts\Plugins\ModelosIGIC\Model\DeclaracionIGIC;
 
 /**
@@ -47,9 +45,8 @@ class EditDeclaracionIGIC extends EditController
     }
 
     /**
-     * Genera el fichero para la ATC y lo prepara como descarga.
-     *
-     * Devuelve false cuando la descarga está lista para no seguir procesando la página.
+     * Lleva al Modelo 420 de la declaración, donde se completan los datos del fichero para el
+     * programa de ayuda de la ATC. El 425 no tiene fichero (doc/NORMATIVA.md).
      */
     protected function downloadATC(): bool
     {
@@ -59,21 +56,12 @@ class EditDeclaracionIGIC extends EditController
             return true;
         }
 
-        $helper = new IGICHelper();
-        $generator = new ATCFileGenerator($modelo);
-        $idempresa = $modelo->getIdEmpresa();
-        $generator->setDesgloseVentas($helper->desgloseIGICVentas($modelo->fechainicio, $modelo->fechafin, $idempresa))
-            ->setDesgloseCompras($helper->desgloseIGICCompras($modelo->fechainicio, $modelo->fechafin, $idempresa));
+        if ($modelo->tipo !== '420' || empty($modelo->idregiva)) {
+            Tools::log()->warning('fichero-atc-solo-420');
+            return true;
+        }
 
-        $content = $generator->generate();
-        $this->setTemplate(false);
-        $this->response
-            ->header('Content-Type', 'application/octet-stream')
-            ->header('Content-Disposition', 'attachment; filename="' . $generator->getFilename() . '"')
-            ->header('Content-Length', (string) strlen($content))
-            ->header('Cache-Control', 'no-cache, must-revalidate')
-            ->setContent($content);
-
+        $this->redirect('Modelo420?id=' . $modelo->idregiva);
         return false;
     }
 

@@ -47,7 +47,8 @@ Compatibility: **FacturaScripts 2025.7+**, **PHP 8.1+**, **PSR-12**. License: **
 | `Model/DeclaracionIGIC.php` + `Table/declaraciones_igic.xml` | Saved declaration (type 420/425, period, totals, status) |
 | `Model/DeclaracionIGICFactura.php` + `Table/declaraciones_igic_facturas.xml` | Invoices included in a declaration |
 | `Lib/IGICHelper.php` | IGIC calculation helpers |
-| `Lib/ATCFileGenerator.php` | `.dec` / `.atc` file generation for the ATC |
+| `Lib/ATCFileGenerator.php` | Experimental `.atc` file of the Modelo 420 for the ATC help program (format taken from the official program; see `doc/NORMATIVA.md`) |
+| `Lib/ListasATC.php` | Official code lists of the help program (street types, Canary municipalities) |
 | `doc/` | Official reference documents and `NORMATIVA.md` (excluded from releases) |
 
 ## Validation workflow

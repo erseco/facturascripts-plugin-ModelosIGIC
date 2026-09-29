@@ -185,6 +185,57 @@ Fuente: instrucciones oficiales del modelo 425, apartados 5, 7, 8 y 9.
 | 120 | Operaciones en régimen general, sin incluir el IGIC | P | Casilla 74; el plugin supone que todas las ventas con IGIC son del régimen general |
 | 121–147 | Operaciones específicas, informativas y régimen del pequeño empresario o profesional | N | |
 
+## Formato del fichero para el programa de ayuda (experimental)
+
+La ATC **no publica un diseño de registro** del fichero del 420. El formato se ha obtenido del propio programa de
+ayuda oficial, descargado de la [ficha del modelo 420](https://www3.gobiernodecanarias.org/tributos/atc/w/modelo-420):
+versión multiplataforma `m420v930e26` (v9.3.0, ejercicio 2026) y `m420v920e25` (v9.2.0, ejercicio 2025). El
+programa no se incluye en el repositorio. Las rutas son las del interior de `pa-mod420.jar`.
+
+| Elemento | Valor que genera el plugin | Fuente en el programa de ayuda |
+|---|---|---|
+| Uso del fichero | Se **importa** en el programa de ayuda del mismo ejercicio, que lo valida y genera la presentación. No se presenta directamente en la sede | `GestorDeclaracionesImpl.importarDeclaraciones()` |
+| Nombre y extensión | `NIF-milisegundos.atc` | `GestorDeclaracionesComunImpl` (nombre de las declaraciones guardadas); la importación solo admite `.atc` |
+| Codificación | XML en ISO-8859-1, comprimido con zlib (con cabecera) y codificado en UU con líneas de 45 bytes, sin líneas `begin`/`end` | `org.grecasa.ext.codificador.Codificador`, `UUEncoder` y `UUDecoder` (`DeflaterOutputStream`) |
+| Esquema | Nodo raíz `DEC` con `IDE`, `IGI_DEV`, `IGI_DED`, `LIQ`, `RES` y `ADI` | `org_grecasa_ext_pa/xsd/Presentacion-420-XMLSchema.xsd` y `Comunes_Presentacion.xsd`; clase JAXB `mod420.logica.xml.jaxb.DEC` |
+| `DEC/@MOD`, `@ANY`, `@PER` | `420`, año del período, `1T`–`4T` | XSD (`PER` String(2)); `PeriodosTrimestrales.txt`. Cada programa solo importa su ejercicio |
+| `DEC/@VER` | `9.3.0` (2026) o `9.2.0` (2025) | `mod420.logica.managers.ObjectUtils.crearDEC()` de cada programa |
+| `DEC/@COM`, `@NJA` | `X` y justificante anterior si es complementaria | XSD; `ObjectUtils.crearDEC()` |
+| `IDE/OTP` | Sujeto pasivo: `SEC=1`, `TPE=SP`, `NIF`, `NRS`, `SVP`, `NVP`, `NPK`, `ESC`, `PIS`, `PUE`, `TEL`, `POP`, `CMU`, `CP`, `PAI=ES` | `ObjectUtilsComun.obtenerDatosIdentificativosDEC()`; obligatorios según `DATOS_PERSONALES` del XSD |
+| Texto de `NRS`, `NVP`... | Mayúsculas sin tildes; se admiten Ñ, dígitos, espacio, coma, punto y guion; `NRS` hasta 75 y `NVP` hasta 50 caracteres | `tributos.logica.dto.DatosPersonales` y `Direccion` (enum `Campos`) |
+| `SVP` | Sigla de la lista oficial | `Siglas.txt`; `ValidadorComunImpl.isDireccionValida()` |
+| `POP`, `CMU` | Los escribe el declarante (2 y 5 dígitos). Para Canarias se ofrece la lista oficial de municipios | `Municipios-35.txt`, `Municipios-38.txt` |
+| Importes | Enteros con dos decimales implícitos, sin punto ni ceros a la izquierda: 70,00 € es `7000`; 0 es `000` | XSD (`IMPA15Type`, «la coma es implícita»); `ConversorNumerico.numberToImpType()` |
+| Tipos | Mismo formato (`700` = 7 %) y solo los de la lista del programa | XSD (`IMPA5Type`); `TiposGravamen.txt` (2025: 0, 3, 5, 7, 9,5, 15 y 20; 2026: además el 1) |
+| `IGI_DEV/DEV` | Una fila por tipo (casillas 01–18; 16b–18c solo en 2026) y `TOT` = casilla 25 | `ObjectUtilsComun.obtenerTDEVENGADO()`; `nombres_campos.properties` |
+| `IGI_DED/OIC` | Casillas 26 y 27; `TOT` = casilla 40 | `ObjectUtilsComun.obtenerTDEDUCIBLE()` |
+| `LIQ` | `DIF` = 41, `RCU` = 42, `CPA` = 43, `DAC` = 44, `RLI` = 41 + 42 − 43 − 44 | `ObjectUtilsComun.obtenerLIQUIDACION()`; `CalculosModelo420.calcularResultado()` |
+| `RES/@TIP` | `I` si el resultado es positivo; `C` si es cero o negativo; `D` si es negativo, en el 4T y lo pide el declarante; `S` sin actividad | XSD; `ValidadorComunImpl.isTipoResultadoValido()` e `isImporteResultadoValido()` |
+| `RES/@IMP` | Valor absoluto del resultado | `ObjectUtilsComun.obtenerRESULTADOLIQUIDACION()` |
+| `RES/@FPA` | Solo si es a ingresar: 1, 2, 4 o 5. La 3 (pago fraccionado) no se admite porque exige el módulo de fraccionamiento | `FormasPago.txt`; XSD |
+| `RES/@IBAN` | Para devolución y para las formas de pago 2 y 4 | `PAModuloUtils.isRequeridoCodigoIban()` |
+| `ADI` | `EOA` = casilla 46, `ODD` = casilla 47 | `ObjectUtilsComun.obtenerINFORMACIONADICIONAL()` |
+| `AUX`, `@FIM`, `@NDE` | No se generan: los cumplimenta el programa | Anotaciones del XSD |
+
+### Cómo se ha comprobado
+
+- `Test/fixtures/codificador-oficial.atc` lo generó `Codificador.codifica()` del programa. `ATCFicheroOficialTest`
+  comprueba que el plugin produce **los mismos bytes**.
+- Los ejemplos de `doc/ejemplos/` (a ingresar, a compensar, a devolver y sin actividad, con datos ficticios) se
+  validan con el XSD oficial en el CI.
+- Con `Test/atc/validar.sh`, los ejemplos de 2026 y de 2025 se decodificaron, se validaron con el validador del
+  programa (`ModuloPA420Impl.isDeclaracionValida()`, sin errores) y se importaron con
+  `GestorDeclaracionesImpl.importarDeclaraciones()` («importada con éxito»). La prueba también detecta ficheros
+  erróneos: una cuota que no cuadra con base y tipo, o un ejercicio distinto del del programa.
+- **Falta** abrir el fichero en el programa de ayuda, con una declaración real, y presentarla. Hasta entonces la
+  función se marca como experimental (`doc/VALIDAR_FICHERO_ATC.md`).
+
+### Modelo 425
+
+El 425 no tiene fichero. Su programa de ayuda (`m425v631e25`, solo para el ejercicio 2025) exige datos que
+FacturaScripts no registra, como los datos estadísticos por actividad (epígrafes y volumen de operaciones) y el
+régimen aplicable. Además, todavía no hay programa del 425 para 2026 (pendiente 7).
+
 ## Correspondencia código ↔ norma
 
 | Código | Regla | Fuente |
@@ -199,6 +250,7 @@ Fuente: instrucciones oficiales del modelo 425, apartados 5, 7, 8 y 9.
 | `IGICHelper::calcularTotalDevengado()`, `calcularTotalDeducible()` | Sin recargo | TR IGIC art. 70.Uno.a |
 | `CasillasModelo420` | Casillas 01–18, 25–27, 40, 41 y 45; tipo de resultado | Instrucciones del 420, apartados 3 a 5 y 7 |
 | `CasillasModelo420::FILAS_DEVENGADO` (16b–18c) | Filas adicionales | Manual del programa de ayuda 2026 (pendiente 1) |
+| `ATCFileGenerator` | Fichero `.atc` del 420 | Programa de ayuda del 420 (sección «Formato del fichero») |
 | `CasillasModelo425` | Casillas 01–18, 74, 79–81, 94, 95, 113, 115, 116 y 120 | Instrucciones del 425, apartados 5, 7, 8 y 9 |
 | `Modelo425` | Plazo y obligados | RG arts. 57.6, 57.8 y 49.5 |
 
@@ -211,8 +263,10 @@ Fuente: instrucciones oficiales del modelo 425, apartados 5, 7, 8 y 9.
    y las marca en pantalla.
 2. **Régimen de viajeros (casillas 23 y 24).** Figura en las instrucciones de 2020, pero el manual de 2026 ya no
    lo incluye en la casilla 25. No se ha verificado si ha desaparecido del modelo.
-3. **Fichero de presentación (`.dec`).** La ATC no publica una especificación. El formato que genera el plugin se
-   revisa en una fase posterior.
+3. **Fichero para el programa de ayuda.** Su formato se ha obtenido del programa de ayuda y se ha comprobado con
+   sus clases (ver [Formato del fichero](#formato-del-fichero-para-el-programa-de-ayuda-experimental)), pero falta
+   importarlo en el programa con una declaración real. Tampoco se ha verificado si la sede acepta ficheros que no
+   genere el propio programa, así que el plugin no genera ficheros de presentación directa.
 4. **Bienes de inversión, importaciones y prorrata.** FacturaScripts no distingue las compras de bienes de
    inversión ni las importaciones, ni aplica la regla de prorrata. El plugin consigna todo el IGIC soportado en
    las casillas 26–27 (420) y 80–81 (425) sin prorratear; hay que revisarlo si procede.
