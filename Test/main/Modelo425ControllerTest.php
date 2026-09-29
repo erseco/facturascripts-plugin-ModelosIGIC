@@ -119,10 +119,15 @@ final class Modelo425ControllerTest extends TestCase
             'codejercicio' => $codejercicio, 'proceso' => 'guardar', 'multireqtoken' => $this->formToken(),
         ]);
         $controller = new class ('Modelo425', '/Modelo425') extends Modelo425 {
-            public function totalDevengado(): float
+            protected function nuevaDeclaracion(): DeclaracionIGIC
             {
-                // un importe no numérico hace fallar el guardado en la base de datos
-                return NAN;
+                // una declaración que no se puede guardar
+                return new class () extends DeclaracionIGIC {
+                    public function save(): bool
+                    {
+                        return false;
+                    }
+                };
             }
         };
         $this->runController($controller);

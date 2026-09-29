@@ -218,7 +218,7 @@ class Modelo425 extends Controller
             return;
         }
 
-        $modelo = new DeclaracionIGIC();
+        $modelo = $this->nuevaDeclaracion();
         $modelo->tipo = '425';
         $modelo->periodo = 'ANUAL';
         $modelo->codejercicio = $this->selectedEjercicio->codejercicio;
@@ -247,6 +247,11 @@ class Modelo425 extends Controller
             $db->rollback();
         }
         Tools::log()->error('error-guardar-modelo-425');
+    }
+
+    protected function nuevaDeclaracion(): DeclaracionIGIC
+    {
+        return new DeclaracionIGIC();
     }
 
     /**
