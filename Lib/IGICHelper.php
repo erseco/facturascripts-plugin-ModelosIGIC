@@ -22,10 +22,12 @@
 namespace FacturaScripts\Plugins\ModelosIGIC\Lib;
 
 use FacturaScripts\Core\Base\DataBase;
+use FacturaScripts\Core\Lib\Calculator;
+use FacturaScripts\Core\Model\Base\BusinessDocument;
 use FacturaScripts\Core\Tools;
-use FacturaScripts\Dinamic\Model\Asiento;
-use FacturaScripts\Dinamic\Model\Ejercicio;
-use FacturaScripts\Dinamic\Model\Partida;
+use FacturaScripts\Core\Where;
+use FacturaScripts\Dinamic\Model\FacturaCliente;
+use FacturaScripts\Dinamic\Model\FacturaProveedor;
 use FacturaScripts\Dinamic\Model\Subcuenta;
 
 /**
@@ -55,108 +57,113 @@ class IGICHelper
     /**
      * Obtiene el desglose del IGIC de las facturas de compra para un período.
      *
-     * @param string $fechaInicio Fecha de inicio del período (formato Y-m-d)
-     * @param string $fechaFin    Fecha de fin del período (formato Y-m-d)
+     * @param string   $fechaInicio Fecha de inicio del período (formato Y-m-d)
+     * @param string   $fechaFin    Fecha de fin del período (formato Y-m-d)
+     * @param int|null $idempresa   Empresa de las facturas (todas si es null)
      *
      * @return array Array con el desglose por tipo de IGIC
      */
-    public function desgloseIGICCompras(string $fechaInicio, string $fechaFin): array
+    public function desgloseIGICCompras(string $fechaInicio, string $fechaFin, ?int $idempresa = null): array
     {
-        $desglose = [];
-
-        if (false === $this->db->tableExists('lineasivafactprov')) {
-            return $desglose;
-        }
-
-        $sql = 'SELECT iva, recargo, SUM(neto) as neto, SUM(totaliva) as totaliva, SUM(totalrecargo) as totalrecargo'
-            . ' FROM lineasivafactprov WHERE idfactura IN (SELECT idfactura FROM facturasprov'
-            . ' WHERE fecha >= ' . $this->db->var2str($fechaInicio)
-            . ' AND fecha <= ' . $this->db->var2str($fechaFin) . ')'
-            . ' GROUP BY iva, recargo ORDER BY iva ASC, recargo ASC';
-
-        $data = $this->db->select($sql);
-        if ($data) {
-            foreach ($data as $d) {
-                $desglose[] = [
-                    'iva' => (float) $d['iva'],
-                    'recargo' => (float) $d['recargo'],
-                    'neto' => (float) $d['neto'],
-                    'totaliva' => (float) $d['totaliva'],
-                    'totalrecargo' => (float) $d['totalrecargo'],
-                ];
-            }
-        }
-
-        return $desglose;
+        return $this->desglose(
+            FacturaProveedor::all($this->whereFacturas($fechaInicio, $fechaFin, $idempresa), ['idfactura' => 'ASC'])
+        );
     }
 
     /**
      * Obtiene el desglose del IGIC de las facturas de venta para un período.
      *
-     * @param string $fechaInicio Fecha de inicio del período (formato Y-m-d)
-     * @param string $fechaFin    Fecha de fin del período (formato Y-m-d)
+     * @param string   $fechaInicio Fecha de inicio del período (formato Y-m-d)
+     * @param string   $fechaFin    Fecha de fin del período (formato Y-m-d)
+     * @param int|null $idempresa   Empresa de las facturas (todas si es null)
      *
      * @return array Array con el desglose por tipo de IGIC
      */
-    public function desgloseIGICVentas(string $fechaInicio, string $fechaFin): array
+    public function desgloseIGICVentas(string $fechaInicio, string $fechaFin, ?int $idempresa = null): array
+    {
+        return $this->desglose(
+            FacturaCliente::all($this->whereFacturas($fechaInicio, $fechaFin, $idempresa), ['idfactura' => 'ASC'])
+        );
+    }
+
+    /**
+     * Comprueba si hay facturas sin asiento contable en el período.
+     *
+     * @param string   $fechaInicio Fecha de inicio del período
+     * @param string   $fechaFin    Fecha de fin del período
+     * @param int|null $idempresa   Empresa de las facturas (todas si es null)
+     *
+     * @return bool True si hay facturas sin asiento
+     */
+    public function hayFacturasSinAsiento(string $fechaInicio, string $fechaFin, ?int $idempresa = null): bool
+    {
+        $where = $this->whereFacturas($fechaInicio, $fechaFin, $idempresa);
+        $where[] = Where::isNull('idasiento');
+
+        return FacturaProveedor::count($where) > 0 || FacturaCliente::count($where) > 0;
+    }
+
+    /**
+     * Agrupa por tipo de IGIC y recargo los subtotales de impuestos de las facturas.
+     *
+     * Usa Calculator::getSubtotals(), el mismo cálculo que hace el núcleo para
+     * los totales de cada factura (descuentos globales incluidos).
+     *
+     * @param BusinessDocument[] $facturas
+     */
+    protected function desglose(array $facturas): array
     {
         $desglose = [];
+        foreach ($facturas as $factura) {
+            $subtotals = Calculator::getSubtotals($factura, $factura->getLines());
+            foreach ($subtotals['iva'] as $item) {
+                $key = (float) $item['iva'] . '|' . (float) $item['recargo'];
+                if (false === isset($desglose[$key])) {
+                    $desglose[$key] = [
+                        'iva' => (float) $item['iva'],
+                        'recargo' => (float) $item['recargo'],
+                        'neto' => 0.0,
+                        'totaliva' => 0.0,
+                        'totalrecargo' => 0.0,
+                    ];
+                }
 
-        if (false === $this->db->tableExists('lineasivafactcli')) {
-            return $desglose;
+                $desglose[$key]['neto'] += (float) $item['neto'];
+                $desglose[$key]['totaliva'] += (float) $item['totaliva'];
+                $desglose[$key]['totalrecargo'] += (float) $item['totalrecargo'];
+            }
         }
 
-        $sql = 'SELECT iva, recargo, SUM(neto) as neto, SUM(totaliva) as totaliva, SUM(totalrecargo) as totalrecargo'
-            . ' FROM lineasivafactcli WHERE idfactura IN (SELECT idfactura FROM facturascli'
-            . ' WHERE fecha >= ' . $this->db->var2str($fechaInicio)
-            . ' AND fecha <= ' . $this->db->var2str($fechaFin) . ')'
-            . ' GROUP BY iva, recargo ORDER BY iva ASC, recargo ASC';
+        usort($desglose, static function (array $a, array $b): int {
+            return [$a['iva'], $a['recargo']] <=> [$b['iva'], $b['recargo']];
+        });
 
-        $data = $this->db->select($sql);
-        if ($data) {
-            foreach ($data as $d) {
-                $desglose[] = [
-                    'iva' => (float) $d['iva'],
-                    'recargo' => (float) $d['recargo'],
-                    'neto' => (float) $d['neto'],
-                    'totaliva' => (float) $d['totaliva'],
-                    'totalrecargo' => (float) $d['totalrecargo'],
-                ];
-            }
+        foreach ($desglose as $i => $item) {
+            $desglose[$i]['neto'] = Tools::round($item['neto']);
+            $desglose[$i]['totaliva'] = Tools::round($item['totaliva']);
+            $desglose[$i]['totalrecargo'] = Tools::round($item['totalrecargo']);
         }
 
         return $desglose;
     }
 
     /**
-     * Comprueba si hay facturas sin asiento contable en el período.
+     * Filtro de facturas por rango de fechas y, opcionalmente, empresa.
      *
-     * @param string $fechaInicio Fecha de inicio del período
-     * @param string $fechaFin    Fecha de fin del período
-     *
-     * @return bool True si hay facturas sin asiento
+     * TODO fase 3 (normativa): confirmar si el período debe filtrarse por la fecha
+     * de expedición (fecha) o por la de devengo (fechadevengo) de la factura.
      */
-    public function hayFacturasSinAsiento(string $fechaInicio, string $fechaFin): bool
+    protected function whereFacturas(string $fechaInicio, string $fechaFin, ?int $idempresa): array
     {
-        // Facturas de compra sin asiento
-        $sql = 'SELECT COUNT(*) as num FROM facturasprov WHERE idasiento IS NULL'
-            . ' AND fecha >= ' . $this->db->var2str($fechaInicio)
-            . ' AND fecha <= ' . $this->db->var2str($fechaFin);
-        $data = $this->db->select($sql);
-        if ($data && (int) $data[0]['num'] > 0) {
-            return true;
+        $where = [
+            Where::gte('fecha', $fechaInicio),
+            Where::lte('fecha', $fechaFin),
+        ];
+        if (null !== $idempresa) {
+            $where[] = Where::eq('idempresa', $idempresa);
         }
 
-        // Facturas de venta sin asiento
-        $sql = 'SELECT COUNT(*) as num FROM facturascli WHERE idasiento IS NULL'
-            . ' AND fecha >= ' . $this->db->var2str($fechaInicio)
-            . ' AND fecha <= ' . $this->db->var2str($fechaFin);
-        $data = $this->db->select($sql);
-        if ($data && (int) $data[0]['num'] > 0) {
-            return true;
-        }
-
-        return false;
+        return $where;
     }
 
     /**

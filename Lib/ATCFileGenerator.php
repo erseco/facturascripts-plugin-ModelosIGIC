@@ -21,6 +21,8 @@
 namespace FacturaScripts\Plugins\ModelosIGIC\Lib;
 
 use DOMDocument;
+use FacturaScripts\Core\DataSrc\Empresas;
+use FacturaScripts\Dinamic\Model\Ejercicio;
 use FacturaScripts\Dinamic\Model\Empresa;
 use FacturaScripts\Plugins\ModelosIGIC\Model\DeclaracionIGIC;
 
@@ -59,8 +61,21 @@ class ATCFileGenerator
     public function __construct(DeclaracionIGIC $modelo)
     {
         $this->modelo = $modelo;
-        $this->empresa = new Empresa();
-        $this->empresa->loadFromCode($this->empresa->idempresa);
+        $this->empresa = $this->loadEmpresa();
+    }
+
+    /**
+     * Carga la empresa del ejercicio de la declaración, o la empresa por defecto.
+     */
+    protected function loadEmpresa(): Empresa
+    {
+        $ejercicio = new Ejercicio();
+        $empresa = new Empresa();
+        if ($ejercicio->load($this->modelo->codejercicio) && $empresa->load($ejercicio->idempresa)) {
+            return $empresa;
+        }
+
+        return Empresas::default();
     }
 
     /**
@@ -361,13 +376,13 @@ class ATCFileGenerator
     public static function decode(string $content): string
     {
         // Decodificar uuencode
-        $decoded = convert_uudecode($content);
+        $decoded = @convert_uudecode($content);
         if ($decoded === false) {
             throw new \RuntimeException('Error al decodificar uuencode');
         }
 
         // Descomprimir zlib
-        $xml = gzinflate($decoded);
+        $xml = @gzinflate($decoded);
         if ($xml === false) {
             throw new \RuntimeException('Error al descomprimir zlib');
         }

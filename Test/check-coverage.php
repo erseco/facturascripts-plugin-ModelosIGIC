@@ -2,8 +2,7 @@
 
 // Fail closed when the coverage report is absent, empty, or below the required minimum.
 // Usage: php check-coverage.php coverage.xml [minimum-percent]
-// Phase 1 baseline: 0.5 %. Raise to 90 % once the functional test suite is in place.
-$minimum = (float) ($argv[2] ?? 0.5);
+$minimum = (float) ($argv[2] ?? 90);
 $report = simplexml_load_file($argv[1] ?? 'coverage.xml');
 if ($report === false || !isset($report->project->metrics)) {
     fwrite(STDERR, "Missing or invalid Clover report.\n");

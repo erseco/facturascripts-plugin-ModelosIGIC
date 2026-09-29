@@ -193,9 +193,7 @@ jobs:
           working-directory: plugin
           files: ../facturascripts/coverage.xml
           disable_search: true
-          # The repository is not yet activated on Codecov (renamed GitHub fork).
-          # Switch back to true once codecov.io/gh/erseco/facturascripts-plugin-ModelosIGIC exists.
-          fail_ci_if_error: false
+          fail_ci_if_error: true
 
       - name: Enforce minimum coverage
         if: ${{ matrix.php-version == '8.3' }}

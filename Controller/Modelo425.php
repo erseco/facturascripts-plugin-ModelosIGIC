@@ -21,12 +21,10 @@
 
 namespace FacturaScripts\Plugins\ModelosIGIC\Controller;
 
-use FacturaScripts\Core\Base\DataBase\DataBaseWhere;
 use FacturaScripts\Core\Template\Controller;
 use FacturaScripts\Core\Tools;
+use FacturaScripts\Core\Where;
 use FacturaScripts\Dinamic\Model\Ejercicio;
-use FacturaScripts\Dinamic\Model\FacturaCliente;
-use FacturaScripts\Dinamic\Model\FacturaProveedor;
 use FacturaScripts\Plugins\ModelosIGIC\Lib\IGICHelper;
 use FacturaScripts\Plugins\ModelosIGIC\Model\DeclaracionIGIC;
 use FacturaScripts\Plugins\ModelosIGIC\Model\DeclaracionIGICFactura;
@@ -82,29 +80,23 @@ class Modelo425 extends Controller
         $this->helper = new IGICHelper();
         $this->ejercicio = new Ejercicio();
 
-        // Obtener ejercicio seleccionado o el actual
-        $codEjercicio = $this->request()->request->get(
-            'codejercicio',
-            $this->request()->query->get('codejercicio', '')
-        );
+        // ejercicio seleccionado o el de la fecha actual
+        $codEjercicio = $this->request()->inputOrQuery('codejercicio', '');
+        $this->selectedEjercicio = empty($codEjercicio) ?
+            $this->getEjercicioByFecha(Tools::date()) :
+            $this->getEjercicio($codEjercicio);
 
-        if (empty($codEjercicio)) {
-            $this->selectedEjercicio = $this->getEjercicioByFecha(date('Y-m-d'));
-        } else {
-            $this->selectedEjercicio = $this->ejercicio->get($codEjercicio);
-        }
-
-        // Buscar modelo fiscal 425 existente para este ejercicio
         if ($this->selectedEjercicio) {
             $this->declaracion = $this->getDeclaracionIGICPorEjercicio($this->selectedEjercicio->codejercicio);
         }
 
-        // Procesar acciones
-        $action = $this->request()->request->get('proceso', '');
-        if ($action === 'guardar' && $this->selectedEjercicio) {
-            $this->guardarModelo425();
-        } elseif ($action === 'marcar-presentado' && $this->declaracion) {
-            $this->marcarPresentado();
+        $action = $this->request()->input('proceso', '');
+        if (in_array($action, ['guardar', 'marcar-presentado'], true) && $this->validateFormToken()) {
+            if ($action === 'guardar' && $this->selectedEjercicio) {
+                $this->guardarModelo425();
+            } elseif ($action === 'marcar-presentado' && $this->declaracion) {
+                $this->marcarPresentado();
+            }
         }
 
         $this->view('Modelo425.html.twig');
@@ -115,8 +107,8 @@ class Modelo425 extends Controller
      */
     protected function marcarPresentado(): void
     {
-        $numeroReferencia = $this->request()->request->get('numeroreferencia', '');
-        $fechaPresentacion = $this->request()->request->get('fechapresentacion', date('Y-m-d'));
+        $numeroReferencia = $this->request()->input('numeroreferencia', '');
+        $fechaPresentacion = $this->request()->input('fechapresentacion') ?: Tools::date();
 
         if ($this->declaracion->marcarPresentado($numeroReferencia ?: null, $fechaPresentacion)) {
             Tools::log()->notice('modelo-marcado-presentado');
@@ -130,7 +122,12 @@ class Modelo425 extends Controller
      */
     public function allEjercicios(): array
     {
-        return $this->ejercicio->all([], ['codejercicio' => 'DESC'], 0, 50);
+        return Ejercicio::all(
+            [Where::eq('idempresa', $this->empresa->idempresa)],
+            ['fechainicio' => 'DESC'],
+            0,
+            50
+        );
     }
 
     /**
@@ -141,7 +138,8 @@ class Modelo425 extends Controller
         if (empty($this->desgloseCompras) && $this->selectedEjercicio !== null) {
             $this->desgloseCompras = $this->helper->desgloseIGICCompras(
                 $this->selectedEjercicio->fechainicio,
-                $this->selectedEjercicio->fechafin
+                $this->selectedEjercicio->fechafin,
+                (int) $this->selectedEjercicio->idempresa
             );
         }
         return $this->desgloseCompras;
@@ -155,7 +153,8 @@ class Modelo425 extends Controller
         if (empty($this->desgloseVentas) && $this->selectedEjercicio !== null) {
             $this->desgloseVentas = $this->helper->desgloseIGICVentas(
                 $this->selectedEjercicio->fechainicio,
-                $this->selectedEjercicio->fechafin
+                $this->selectedEjercicio->fechafin,
+                (int) $this->selectedEjercicio->idempresa
             );
         }
         return $this->desgloseVentas;
@@ -210,11 +209,10 @@ class Modelo425 extends Controller
     }
 
     /**
-     * Guarda el modelo 425 y las facturas asociadas.
+     * Guarda el modelo 425 y las facturas asociadas en una transacción.
      */
     protected function guardarModelo425(): void
     {
-        // Verificar si ya existe un modelo 425 para este ejercicio
         if ($this->declaracion !== null) {
             Tools::log()->warning('modelo-425-ya-existe');
             return;
@@ -231,37 +229,24 @@ class Modelo425 extends Controller
         $modelo->resultado = $modelo->totaldevengado - $modelo->totaldeducible;
         $modelo->estado = 'borrador';
 
-        if ($modelo->save()) {
-            $this->guardarFacturasModelo($modelo);
+        // las tablas no se pueden crear dentro de una transacción
+        new DeclaracionIGICFactura();
+
+        $db = $this->db();
+        $newTransaction = false === $db->inTransaction() && $db->beginTransaction();
+        if ($modelo->save() && $modelo->guardarFacturas((int) $this->selectedEjercicio->idempresa)) {
+            if ($newTransaction) {
+                $db->commit();
+            }
             $this->declaracion = $modelo;
             Tools::log()->notice('modelo-425-guardado');
-        } else {
-            Tools::log()->error('error-guardar-modelo-425');
-        }
-    }
-
-    /**
-     * Guarda las facturas incluidas en el modelo fiscal.
-     */
-    protected function guardarFacturasModelo(DeclaracionIGIC $modelo): void
-    {
-        // Facturas de cliente (ventas - IGIC devengado)
-        $facturaCliente = new FacturaCliente();
-        $where = [
-            new DataBaseWhere('fecha', $modelo->fechainicio, '>='),
-            new DataBaseWhere('fecha', $modelo->fechafin, '<='),
-        ];
-        foreach ($facturaCliente->all($where) as $factura) {
-            $mf = DeclaracionIGICFactura::fromFacturaCliente($factura, $modelo->idmodelo);
-            $mf->save();
+            return;
         }
 
-        // Facturas de proveedor (compras - IGIC deducible)
-        $facturaProveedor = new FacturaProveedor();
-        foreach ($facturaProveedor->all($where) as $factura) {
-            $mf = DeclaracionIGICFactura::fromFacturaProveedor($factura, $modelo->idmodelo);
-            $mf->save();
+        if ($newTransaction) {
+            $db->rollback();
         }
+        Tools::log()->error('error-guardar-modelo-425');
     }
 
     /**
@@ -269,13 +254,10 @@ class Modelo425 extends Controller
      */
     protected function getDeclaracionIGICPorEjercicio(string $codejercicio): ?DeclaracionIGIC
     {
-        $modelo = new DeclaracionIGIC();
-        $where = [
-            new DataBaseWhere('tipo', '425'),
-            new DataBaseWhere('codejercicio', $codejercicio),
-        ];
-        $modelos = $modelo->all($where, [], 0, 1);
-        return empty($modelos) ? null : $modelos[0];
+        return DeclaracionIGIC::findWhere([
+            Where::eq('tipo', '425'),
+            Where::eq('codejercicio', $codejercicio),
+        ], ['idmodelo' => 'DESC']);
     }
 
     /**
@@ -303,24 +285,32 @@ class Modelo425 extends Controller
             return [];
         }
 
-        $modelo = new DeclaracionIGIC();
-        $where = [
-            new DataBaseWhere('tipo', '420'),
-            new DataBaseWhere('codejercicio', $this->selectedEjercicio->codejercicio),
-        ];
-        return $modelo->all($where, ['periodo' => 'ASC']);
+        return DeclaracionIGIC::all([
+            Where::eq('tipo', '420'),
+            Where::eq('codejercicio', $this->selectedEjercicio->codejercicio),
+        ], ['periodo' => 'ASC', 'idmodelo' => 'ASC']);
     }
 
     /**
-     * Obtiene el ejercicio que contiene la fecha indicada.
+     * Obtiene un ejercicio de la empresa por su código.
+     */
+    protected function getEjercicio(string $codejercicio): ?Ejercicio
+    {
+        $ejercicio = new Ejercicio();
+        if (false === $ejercicio->load($codejercicio)) {
+            return null;
+        }
+
+        return $ejercicio->idempresa == $this->empresa->idempresa ? $ejercicio : null;
+    }
+
+    /**
+     * Obtiene el ejercicio de la empresa que contiene la fecha indicada.
      */
     protected function getEjercicioByFecha(string $fecha): ?Ejercicio
     {
-        $where = [
-            new DataBaseWhere('fechainicio', $fecha, '<='),
-            new DataBaseWhere('fechafin', $fecha, '>='),
-        ];
-        $ejercicios = $this->ejercicio->all($where, [], 0, 1);
-        return empty($ejercicios) ? null : $ejercicios[0];
+        $ejercicio = new Ejercicio();
+        $ejercicio->idempresa = $this->empresa->idempresa;
+        return $ejercicio->loadFromDate($fecha, false, false) ? $ejercicio : null;
     }
 }

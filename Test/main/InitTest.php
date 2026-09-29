@@ -191,4 +191,14 @@ class InitTest extends TestCase
             'Init should inherit loadExtension method from InitClass'
         );
     }
+
+    public function testLifecycleMethodsRun(): void
+    {
+        $init = new Init();
+        $init->init();
+        $init->update();
+        $init->uninstall();
+
+        $this->assertInstanceOf(Init::class, $init);
+    }
 }

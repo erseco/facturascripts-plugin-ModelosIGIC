@@ -20,9 +20,13 @@
 
 namespace FacturaScripts\Plugins\ModelosIGIC\Model;
 
-use FacturaScripts\Core\Model\Base\ModelClass;
-use FacturaScripts\Core\Model\Base\ModelTrait;
+use FacturaScripts\Core\Template\ModelClass;
+use FacturaScripts\Core\Template\ModelTrait;
 use FacturaScripts\Core\Tools;
+use FacturaScripts\Core\Where;
+use FacturaScripts\Dinamic\Model\Ejercicio;
+use FacturaScripts\Dinamic\Model\FacturaCliente;
+use FacturaScripts\Dinamic\Model\FacturaProveedor;
 
 /**
  * Modelo para almacenar los modelos fiscales presentados (420 y 425).
@@ -110,10 +114,7 @@ class DeclaracionIGIC extends ModelClass
      */
     public function getFacturas(): array
     {
-        $factura = new DeclaracionIGICFactura();
-        return $factura->all([
-            new \FacturaScripts\Core\Base\DataBase\DataBaseWhere('idmodelo', $this->idmodelo),
-        ]);
+        return DeclaracionIGICFactura::all([Where::eq('idmodelo', $this->idmodelo)], ['fecha' => 'ASC', 'id' => 'ASC']);
     }
 
     /**
@@ -123,11 +124,10 @@ class DeclaracionIGIC extends ModelClass
      */
     public function getFacturasCliente(): array
     {
-        $factura = new DeclaracionIGICFactura();
-        return $factura->all([
-            new \FacturaScripts\Core\Base\DataBase\DataBaseWhere('idmodelo', $this->idmodelo),
-            new \FacturaScripts\Core\Base\DataBase\DataBaseWhere('tipofactura', 'cliente'),
-        ]);
+        return DeclaracionIGICFactura::all([
+            Where::eq('idmodelo', $this->idmodelo),
+            Where::eq('tipofactura', 'cliente'),
+        ], ['fecha' => 'ASC', 'id' => 'ASC']);
     }
 
     /**
@@ -137,11 +137,19 @@ class DeclaracionIGIC extends ModelClass
      */
     public function getFacturasProveedor(): array
     {
-        $factura = new DeclaracionIGICFactura();
-        return $factura->all([
-            new \FacturaScripts\Core\Base\DataBase\DataBaseWhere('idmodelo', $this->idmodelo),
-            new \FacturaScripts\Core\Base\DataBase\DataBaseWhere('tipofactura', 'proveedor'),
-        ]);
+        return DeclaracionIGICFactura::all([
+            Where::eq('idmodelo', $this->idmodelo),
+            Where::eq('tipofactura', 'proveedor'),
+        ], ['fecha' => 'ASC', 'id' => 'ASC']);
+    }
+
+    /**
+     * Devuelve la empresa del ejercicio de la declaración.
+     */
+    public function getIdEmpresa(): ?int
+    {
+        $ejercicio = new Ejercicio();
+        return $ejercicio->load($this->codejercicio) ? (int) $ejercicio->idempresa : null;
     }
 
     /**
@@ -149,7 +157,7 @@ class DeclaracionIGIC extends ModelClass
      */
     public function esRectificativo(): bool
     {
-        return $this->idrectifica !== null;
+        return !empty($this->idrectifica);
     }
 
     /**
@@ -157,10 +165,12 @@ class DeclaracionIGIC extends ModelClass
      */
     public function getModeloRectificado(): ?self
     {
-        if ($this->idrectifica === null) {
+        if (empty($this->idrectifica)) {
             return null;
         }
-        return $this->get($this->idrectifica);
+
+        $modelo = new self();
+        return $modelo->load($this->idrectifica) ? $modelo : null;
     }
 
     /**
@@ -170,9 +180,7 @@ class DeclaracionIGIC extends ModelClass
      */
     public function getModelosRectificativos(): array
     {
-        return $this->all([
-            new \FacturaScripts\Core\Base\DataBase\DataBaseWhere('idrectifica', $this->idmodelo),
-        ]);
+        return self::all([Where::eq('idrectifica', $this->idmodelo)], ['idmodelo' => 'ASC']);
     }
 
     /**
@@ -214,6 +222,9 @@ class DeclaracionIGIC extends ModelClass
 
     /**
      * Crea un modelo rectificativo basado en este.
+     *
+     * Todo se hace en una transacción: si falla cualquier paso no queda
+     * el original marcado como rectificado ni un rectificativo a medias.
      */
     public function crearRectificativo(): ?self
     {
@@ -221,13 +232,101 @@ class DeclaracionIGIC extends ModelClass
             return null;
         }
 
-        // Marcar este modelo como rectificado
+        // las tablas no se pueden crear dentro de una transacción
+        new DeclaracionIGICFactura();
+
+        $db = self::db();
+        $newTransaction = false === $db->inTransaction() && $db->beginTransaction();
+
+        $nuevo = $this->copiarComoRectificativo();
+        if (null === $nuevo) {
+            if ($newTransaction) {
+                $db->rollback();
+            }
+            $this->estado = 'presentado';
+            return null;
+        }
+
+        if ($newTransaction) {
+            $db->commit();
+        }
+
+        return $nuevo;
+    }
+
+    /**
+     * Elimina la declaración junto con las facturas registradas en ella.
+     */
+    public function delete(): bool
+    {
+        new DeclaracionIGICFactura();
+
+        $db = self::db();
+        $newTransaction = false === $db->inTransaction() && $db->beginTransaction();
+
+        foreach ($this->getFacturas() as $factura) {
+            if (false === $factura->delete()) {
+                if ($newTransaction) {
+                    $db->rollback();
+                }
+                return false;
+            }
+        }
+
+        if (false === parent::delete()) {
+            if ($newTransaction) {
+                $db->rollback();
+            }
+            return false;
+        }
+
+        if ($newTransaction) {
+            $db->commit();
+        }
+
+        return true;
+    }
+
+    /**
+     * Registra en la declaración las facturas de cliente y proveedor de su período.
+     *
+     * Si se indica una empresa, solo se registran sus facturas.
+     */
+    public function guardarFacturas(?int $idempresa = null): bool
+    {
+        $where = [
+            Where::gte('fecha', $this->fechainicio),
+            Where::lte('fecha', $this->fechafin),
+        ];
+        if (null !== $idempresa) {
+            $where[] = Where::eq('idempresa', $idempresa);
+        }
+
+        foreach (FacturaCliente::all($where, ['fecha' => 'ASC', 'idfactura' => 'ASC']) as $factura) {
+            if (false === DeclaracionIGICFactura::fromFacturaCliente($factura, (int) $this->idmodelo)->save()) {
+                return false;
+            }
+        }
+
+        foreach (FacturaProveedor::all($where, ['fecha' => 'ASC', 'idfactura' => 'ASC']) as $factura) {
+            if (false === DeclaracionIGICFactura::fromFacturaProveedor($factura, (int) $this->idmodelo)->save()) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Marca este modelo como rectificado y crea la copia rectificativa con sus facturas.
+     */
+    private function copiarComoRectificativo(): ?self
+    {
         $this->estado = 'rectificado';
         if (false === $this->save()) {
             return null;
         }
 
-        // Crear el nuevo modelo rectificativo
         $nuevo = new self();
         $nuevo->tipo = $this->tipo;
         $nuevo->periodo = $this->periodo;
@@ -240,28 +339,29 @@ class DeclaracionIGIC extends ModelClass
         $nuevo->totaldeducible = $this->totaldeducible;
         $nuevo->resultado = $this->resultado;
         $nuevo->estado = 'borrador';
-
-        if ($nuevo->save()) {
-            // Copiar las facturas al nuevo modelo
-            foreach ($this->getFacturas() as $factura) {
-                $nuevaFactura = new DeclaracionIGICFactura();
-                $nuevaFactura->idmodelo = $nuevo->idmodelo;
-                $nuevaFactura->tipofactura = $factura->tipofactura;
-                $nuevaFactura->idfactura = $factura->idfactura;
-                $nuevaFactura->codigo = $factura->codigo;
-                $nuevaFactura->fecha = $factura->fecha;
-                $nuevaFactura->cifnif = $factura->cifnif;
-                $nuevaFactura->nombre = $factura->nombre;
-                $nuevaFactura->neto = $factura->neto;
-                $nuevaFactura->totaligic = $factura->totaligic;
-                $nuevaFactura->totalrecargo = $factura->totalrecargo;
-                $nuevaFactura->incluida = $factura->incluida;
-                $nuevaFactura->save();
-            }
-            return $nuevo;
+        if (false === $nuevo->save()) {
+            return null;
         }
 
-        return null;
+        foreach ($this->getFacturas() as $factura) {
+            $copia = new DeclaracionIGICFactura();
+            $copia->idmodelo = $nuevo->idmodelo;
+            $copia->tipofactura = $factura->tipofactura;
+            $copia->idfactura = $factura->idfactura;
+            $copia->codigo = $factura->codigo;
+            $copia->fecha = $factura->fecha;
+            $copia->cifnif = $factura->cifnif;
+            $copia->nombre = $factura->nombre;
+            $copia->neto = $factura->neto;
+            $copia->totaligic = $factura->totaligic;
+            $copia->totalrecargo = $factura->totalrecargo;
+            $copia->incluida = $factura->incluida;
+            if (false === $copia->save()) {
+                return null;
+            }
+        }
+
+        return $nuevo;
     }
 
     public function test(): bool

@@ -21,6 +21,8 @@
 namespace FacturaScripts\Plugins\ModelosIGIC\Controller;
 
 use FacturaScripts\Core\Lib\ExtendedController\EditController;
+use FacturaScripts\Core\Tools;
+use FacturaScripts\Core\Where;
 use FacturaScripts\Plugins\ModelosIGIC\Lib\ATCFileGenerator;
 use FacturaScripts\Plugins\ModelosIGIC\Lib\IGICHelper;
 use FacturaScripts\Plugins\ModelosIGIC\Model\DeclaracionIGIC;
@@ -35,47 +37,44 @@ class EditDeclaracionIGIC extends EditController
         return 'DeclaracionIGIC';
     }
 
-    protected function execPreviousAction($action): bool
+    protected function execPreviousAction($action)
     {
         if ($action === 'download-atc') {
-            $this->downloadATC();
-            return false;
+            return $this->downloadATC();
         }
 
         return parent::execPreviousAction($action);
     }
 
     /**
-     * Genera y descarga el fichero ATC.
+     * Genera el fichero para la ATC y lo prepara como descarga.
+     *
+     * Devuelve false cuando la descarga está lista para no seguir procesando la página.
      */
-    protected function downloadATC(): void
+    protected function downloadATC(): bool
     {
-        $code = $this->request->get('code');
         $modelo = new DeclaracionIGIC();
-        if (false === $modelo->loadFromCode($code)) {
-            return;
+        if (false === $modelo->load($this->request->queryOrInput('code', ''))) {
+            Tools::log()->warning('record-not-found');
+            return true;
         }
 
         $helper = new IGICHelper();
         $generator = new ATCFileGenerator($modelo);
+        $idempresa = $modelo->getIdEmpresa();
+        $generator->setDesgloseVentas($helper->desgloseIGICVentas($modelo->fechainicio, $modelo->fechafin, $idempresa))
+            ->setDesgloseCompras($helper->desgloseIGICCompras($modelo->fechainicio, $modelo->fechafin, $idempresa));
 
-        $desgloseVentas = $helper->desgloseIGICVentas($modelo->fechainicio, $modelo->fechafin);
-        $desgloseCompras = $helper->desgloseIGICCompras($modelo->fechainicio, $modelo->fechafin);
-
-        $generator->setDesgloseVentas($desgloseVentas)
-            ->setDesgloseCompras($desgloseCompras);
-
-        $filename = $generator->getFilename();
         $content = $generator->generate();
+        $this->setTemplate(false);
+        $this->response
+            ->header('Content-Type', 'application/octet-stream')
+            ->header('Content-Disposition', 'attachment; filename="' . $generator->getFilename() . '"')
+            ->header('Content-Length', (string) strlen($content))
+            ->header('Cache-Control', 'no-cache, must-revalidate')
+            ->setContent($content);
 
-        header('Content-Type: application/octet-stream');
-        header('Content-Disposition: attachment; filename="' . $filename . '"');
-        header('Content-Length: ' . strlen($content));
-        header('Cache-Control: no-cache, must-revalidate');
-        header('Pragma: no-cache');
-
-        echo $content;
-        exit;
+        return false;
     }
 
     public function getPageData(): array
@@ -98,7 +97,7 @@ class EditDeclaracionIGIC extends EditController
             'action' => 'download-atc',
             'icon' => 'fa-solid fa-download',
             'label' => 'descargar-atc',
-            'type' => 'link',
+            'type' => 'action',
         ]);
 
         // Pestaña de facturas de cliente
@@ -140,8 +139,8 @@ class EditDeclaracionIGIC extends EditController
             case 'ListDeclaracionIGICFactura-cliente':
                 $idmodelo = $this->getViewModelValue($mvn, 'idmodelo');
                 $where = [
-                    new \FacturaScripts\Core\Base\DataBase\DataBaseWhere('idmodelo', $idmodelo),
-                    new \FacturaScripts\Core\Base\DataBase\DataBaseWhere('tipofactura', 'cliente'),
+                    Where::eq('idmodelo', $idmodelo),
+                    Where::eq('tipofactura', 'cliente'),
                 ];
                 $view->loadData('', $where);
                 break;
@@ -149,8 +148,8 @@ class EditDeclaracionIGIC extends EditController
             case 'ListDeclaracionIGICFactura-proveedor':
                 $idmodelo = $this->getViewModelValue($mvn, 'idmodelo');
                 $where = [
-                    new \FacturaScripts\Core\Base\DataBase\DataBaseWhere('idmodelo', $idmodelo),
-                    new \FacturaScripts\Core\Base\DataBase\DataBaseWhere('tipofactura', 'proveedor'),
+                    Where::eq('idmodelo', $idmodelo),
+                    Where::eq('tipofactura', 'proveedor'),
                 ];
                 $view->loadData('', $where);
                 break;

@@ -21,32 +21,22 @@
 
 namespace FacturaScripts\Plugins\ModelosIGIC\Controller;
 
-use FacturaScripts\Core\Base\DataBase\DataBaseWhere;
 use FacturaScripts\Core\Template\Controller;
 use FacturaScripts\Core\Tools;
-use FacturaScripts\Dinamic\Model\Asiento;
+use FacturaScripts\Core\Where;
 use FacturaScripts\Dinamic\Model\Ejercicio;
-use FacturaScripts\Dinamic\Model\FacturaCliente;
-use FacturaScripts\Dinamic\Model\FacturaProveedor;
 use FacturaScripts\Dinamic\Model\Partida;
 use FacturaScripts\Dinamic\Model\RegularizacionImpuesto;
 use FacturaScripts\Plugins\ModelosIGIC\Lib\ATCFileGenerator;
 use FacturaScripts\Plugins\ModelosIGIC\Lib\IGICHelper;
+use FacturaScripts\Plugins\ModelosIGIC\Lib\RegularizacionIGIC;
 use FacturaScripts\Plugins\ModelosIGIC\Model\DeclaracionIGIC;
-use FacturaScripts\Plugins\ModelosIGIC\Model\DeclaracionIGICFactura;
 
 /**
  * Controlador para el Modelo 420 - Autoliquidación trimestral del IGIC.
  *
- * El Modelo 420 es el formulario de autoliquidación del Impuesto General Indirecto
- * Canario (IGIC) que deben presentar los empresarios y profesionales que realicen
- * operaciones en el régimen ordinario en las Islas Canarias.
- *
- * Plazos de presentación:
- * - T1 (enero-marzo): del 1 al 20 de abril
- * - T2 (abril-junio): del 1 al 20 de julio
- * - T3 (julio-septiembre): del 1 al 20 de octubre
- * - T4 (octubre-diciembre): del 1 al 30 de enero del año siguiente
+ * Calcula la regularización del IGIC de un período, genera su asiento contable,
+ * registra la declaración y permite descargar el fichero para la ATC.
  *
  * @see https://www3.gobiernodecanarias.org/tributos/atc/w/modelo-420
  */
@@ -58,14 +48,14 @@ class Modelo420 extends Controller
     /** @var array */
     public array $auxRegiva = [];
 
+    /** @var ?DeclaracionIGIC */
+    public ?DeclaracionIGIC $declaracion = null;
+
     /** @var string */
     public string $fechaDesde = '';
 
     /** @var string */
     public string $fechaHasta = '';
-
-    /** @var IGICHelper */
-    protected IGICHelper $helper;
 
     /** @var string */
     public string $periodo = '';
@@ -76,14 +66,14 @@ class Modelo420 extends Controller
     /** @var ?RegularizacionImpuesto */
     public ?RegularizacionImpuesto $selectedRegiva = null;
 
+    /** @var IGICHelper */
+    protected IGICHelper $helper;
+
     /** @var array */
     private array $desgloseCompras = [];
 
     /** @var array */
     private array $desgloseVentas = [];
-
-    /** @var ?DeclaracionIGIC */
-    public ?DeclaracionIGIC $declaracion = null;
 
     public function getPageData(): array
     {
@@ -99,60 +89,41 @@ class Modelo420 extends Controller
     {
         parent::run();
 
-        $this->allowDelete = $this->permissions->allowDelete;
+        $this->allowDelete = (bool) $this->permissions->allowDelete;
         $this->helper = new IGICHelper();
         $this->regiva = new RegularizacionImpuesto();
 
-        // Calcular período por defecto
         $periodoDefault = $this->helper->calcularPeriodoActual();
-        $this->fechaDesde = $periodoDefault['fecha_desde'];
-        $this->fechaHasta = $periodoDefault['fecha_hasta'];
-        $this->periodo = $periodoDefault['periodo'];
+        $this->fechaDesde = $this->request()->input('desde') ?: $periodoDefault['fecha_desde'];
+        $this->fechaHasta = $this->request()->input('hasta') ?: $periodoDefault['fecha_hasta'];
+        $this->periodo = $this->request()->input('periodo') ?: $periodoDefault['periodo'];
 
-        // Procesar fechas del formulario
-        if ($this->request()->request->has('desde')) {
-            $this->fechaDesde = $this->request()->request->get('desde');
-        }
-        if ($this->request()->request->has('hasta')) {
-            $this->fechaHasta = $this->request()->request->get('hasta');
-        }
-
-        // Ver regularización existente
-        $id = $this->request()->query->getInt('id');
+        // regularización seleccionada
+        $id = (int) $this->request()->query('id', 0);
         if ($id > 0) {
-            $this->selectedRegiva = $this->regiva->get($id);
-            // Buscar modelo fiscal asociado
-            if ($this->selectedRegiva) {
-                $this->declaracion = $this->getDeclaracionIGICPorRegiva($this->selectedRegiva->idregiva);
-            }
+            $this->loadRegiva($id);
         }
 
-        // Procesar acciones
-        $action = $this->request()->request->get('proceso', '');
-        if ($action === 'comprobar') {
-            $this->completarRegiva();
-        } elseif ($action === 'guardar') {
-            $this->guardarRegiva();
-        } elseif ($action === 'marcar-presentado' && $this->declaracion) {
-            $this->marcarPresentado();
-        } elseif ($action === 'crear-rectificativo' && $this->declaracion) {
-            $this->crearRectificativo();
-        }
-
-        // Descargar fichero ATC
-        $downloadATC = $this->request()->query->get('download-atc', '');
-        if ($downloadATC === '1' && $this->declaracion) {
-            $this->descargarATC();
+        if (false === $this->execAction($this->request()->input('proceso', ''))) {
             return;
         }
 
-        // Eliminar regularización
-        $deleteId = $this->request()->query->getInt('delete');
-        if ($deleteId > 0 && $this->allowDelete) {
-            $this->eliminarRegiva($deleteId);
-        }
-
         $this->view('Modelo420.html.twig');
+    }
+
+    /**
+     * Obtiene todas las regularizaciones existentes.
+     *
+     * @return RegularizacionImpuesto[]
+     */
+    public function allRegularizaciones(): array
+    {
+        return RegularizacionImpuesto::all(
+            [Where::eq('idempresa', $this->empresa->idempresa)],
+            ['fechainicio' => 'DESC'],
+            0,
+            50
+        );
     }
 
     /**
@@ -163,7 +134,8 @@ class Modelo420 extends Controller
         if (empty($this->desgloseCompras) && $this->selectedRegiva !== null) {
             $this->desgloseCompras = $this->helper->desgloseIGICCompras(
                 $this->selectedRegiva->fechainicio,
-                $this->selectedRegiva->fechafin
+                $this->selectedRegiva->fechafin,
+                (int) $this->selectedRegiva->idempresa
             );
         }
         return $this->desgloseCompras;
@@ -177,18 +149,37 @@ class Modelo420 extends Controller
         if (empty($this->desgloseVentas) && $this->selectedRegiva !== null) {
             $this->desgloseVentas = $this->helper->desgloseIGICVentas(
                 $this->selectedRegiva->fechainicio,
-                $this->selectedRegiva->fechafin
+                $this->selectedRegiva->fechafin,
+                (int) $this->selectedRegiva->idempresa
             );
         }
         return $this->desgloseVentas;
     }
 
     /**
-     * Calcula el total del IGIC devengado.
+     * Obtiene las facturas de cliente de la declaración seleccionada.
      */
-    public function totalDevengado(): float
+    public function getFacturasClienteModelo(): array
     {
-        return $this->helper->calcularTotalDevengado($this->desgloseIGICVentas());
+        return $this->declaracion ? $this->declaracion->getFacturasCliente() : [];
+    }
+
+    /**
+     * Obtiene las facturas de proveedor de la declaración seleccionada.
+     */
+    public function getFacturasProveedorModelo(): array
+    {
+        return $this->declaracion ? $this->declaracion->getFacturasProveedor() : [];
+    }
+
+    /**
+     * Devuelve las partidas del asiento de la regularización seleccionada.
+     *
+     * @return Partida[]
+     */
+    public function getPartidas(): array
+    {
+        return $this->selectedRegiva ? RegularizacionIGIC::getPartidas($this->selectedRegiva) : [];
     }
 
     /**
@@ -200,11 +191,11 @@ class Modelo420 extends Controller
     }
 
     /**
-     * Obtiene todas las regularizaciones existentes.
+     * Calcula el total del IGIC devengado.
      */
-    public function allRegularizaciones(): array
+    public function totalDevengado(): float
     {
-        return $this->regiva->all([], ['fechainicio' => 'DESC'], 0, 50);
+        return $this->helper->calcularTotalDevengado($this->desgloseIGICVentas());
     }
 
     /**
@@ -212,20 +203,18 @@ class Modelo420 extends Controller
      */
     protected function completarRegiva(): void
     {
-        // Verificar facturas sin asiento
-        if ($this->helper->hayFacturasSinAsiento($this->fechaDesde, $this->fechaHasta)) {
+        $idempresa = (int) $this->empresa->idempresa;
+        if ($this->helper->hayFacturasSinAsiento($this->fechaDesde, $this->fechaHasta, $idempresa)) {
             Tools::log()->error('facturas-sin-asiento');
             return;
         }
 
-        // Obtener ejercicio
-        $eje = $this->getEjercicioByFecha($this->fechaDesde, true);
-        if (false === $eje) {
+        $eje = $this->getEjercicioByFecha($this->fechaDesde);
+        if (null === $eje) {
             Tools::log()->error('ejercicio-cerrado');
             return;
         }
 
-        // Calcular las partidas propuestas
         $this->auxRegiva = $this->helper->calcularRegularizacion(
             $this->fechaDesde,
             $this->fechaHasta,
@@ -238,331 +227,161 @@ class Modelo420 extends Controller
     }
 
     /**
-     * Guarda la regularización creando el asiento contable.
+     * Crea un modelo rectificativo de la declaración seleccionada.
+     */
+    protected function crearRectificativo(): void
+    {
+        $nuevo = $this->declaracion->crearRectificativo();
+        if (null === $nuevo) {
+            Tools::log()->error('error-crear-rectificativo');
+            return;
+        }
+
+        $this->declaracion = $nuevo;
+        Tools::log()->notice('modelo-rectificativo-creado');
+    }
+
+    /**
+     * Genera el fichero para la ATC y lo prepara como descarga.
+     */
+    protected function descargarATC(): void
+    {
+        $idempresa = $this->declaracion->getIdEmpresa();
+        $generator = new ATCFileGenerator($this->declaracion);
+        $generator->setDesgloseVentas($this->helper->desgloseIGICVentas(
+            $this->declaracion->fechainicio,
+            $this->declaracion->fechafin,
+            $idempresa
+        ))->setDesgloseCompras($this->helper->desgloseIGICCompras(
+            $this->declaracion->fechainicio,
+            $this->declaracion->fechafin,
+            $idempresa
+        ));
+
+        $content = $generator->generate();
+        $this->response()
+            ->header('Content-Type', 'application/octet-stream')
+            ->header('Content-Disposition', 'attachment; filename="' . $generator->getFilename() . '"')
+            ->header('Content-Length', (string) strlen($content))
+            ->header('Cache-Control', 'no-cache, must-revalidate')
+            ->setContent($content)
+            ->send();
+    }
+
+    /**
+     * Elimina la regularización seleccionada.
+     */
+    protected function eliminarRegiva(): void
+    {
+        if (false === $this->allowDelete) {
+            Tools::log()->warning('not-allowed-delete');
+            return;
+        }
+
+        if ((new RegularizacionIGIC($this->helper))->eliminar($this->selectedRegiva)) {
+            Tools::log()->notice('regularizacion-eliminada');
+            $this->selectedRegiva = null;
+            $this->declaracion = null;
+        }
+    }
+
+    /**
+     * Ejecuta la acción solicitada. Devuelve false si ya se ha enviado la respuesta.
+     */
+    protected function execAction(string $action): bool
+    {
+        if ($this->request()->query('download-atc') === '1' && $this->declaracion) {
+            $this->descargarATC();
+            return false;
+        }
+
+        if ($action === 'comprobar') {
+            $this->completarRegiva();
+            return true;
+        }
+
+        $acciones = ['guardar', 'eliminar', 'marcar-presentado', 'crear-rectificativo'];
+        if (false === in_array($action, $acciones, true) || false === $this->validateFormToken()) {
+            return true;
+        }
+
+        if ($action === 'guardar') {
+            $this->guardarRegiva();
+        } elseif ($action === 'eliminar' && $this->selectedRegiva) {
+            $this->eliminarRegiva();
+        } elseif ($action === 'marcar-presentado' && $this->declaracion) {
+            $this->marcarPresentado();
+        } elseif ($action === 'crear-rectificativo' && $this->declaracion) {
+            $this->crearRectificativo();
+        }
+
+        return true;
+    }
+
+    /**
+     * Obtiene el ejercicio abierto de la empresa que contiene la fecha indicada.
+     */
+    protected function getEjercicioByFecha(string $fecha): ?Ejercicio
+    {
+        $ejercicio = new Ejercicio();
+        $ejercicio->idempresa = $this->empresa->idempresa;
+        if (false === $ejercicio->loadFromDate($fecha, true, false)) {
+            return null;
+        }
+
+        return $ejercicio;
+    }
+
+    /**
+     * Guarda la regularización creando el asiento contable y la declaración.
      */
     protected function guardarRegiva(): void
     {
-        $eje = $this->getEjercicioByFecha($this->fechaDesde, true);
-        if (false === $eje) {
+        $eje = $this->getEjercicioByFecha($this->fechaDesde);
+        if (null === $eje) {
             Tools::log()->error('ejercicio-cerrado');
             return;
         }
 
-        $periodo = $this->request()->request->get('periodo', $this->periodo);
-        $saldo = 0.0;
-
-        // Crear asiento
-        $asiento = new Asiento();
-        $asiento->codejercicio = $eje->codejercicio;
-        $asiento->concepto = 'REGULARIZACIÓN IGIC ' . $periodo;
-        $asiento->fecha = $this->fechaHasta;
-        $asiento->editable = false;
-
-        if (false === $asiento->save()) {
-            Tools::log()->error('error-guardar-asiento');
+        $regiva = (new RegularizacionIGIC($this->helper))->guardar(
+            $eje,
+            $this->fechaDesde,
+            $this->fechaHasta,
+            $this->periodo
+        );
+        if (null === $regiva) {
             return;
         }
 
-        $continuar = true;
-
-        // Partidas del IGIC soportado
-        foreach ($this->helper->getSubcuentasEspeciales('IVASOP', $eje->codejercicio) as $sctaIGICSop) {
-            $partida = new Partida();
-            $partida->idasiento = $asiento->idasiento;
-            $partida->concepto = $asiento->concepto;
-            $partida->coddivisa = $sctaIGICSop->coddivisa;
-            $partida->codsubcuenta = $sctaIGICSop->codsubcuenta;
-            $partida->idsubcuenta = $sctaIGICSop->idsubcuenta;
-
-            $totales = $this->helper->getTotalesSubcuenta(
-                $sctaIGICSop->idsubcuenta,
-                $this->fechaDesde,
-                $this->fechaHasta
-            );
-
-            if ($totales['saldo'] != 0) {
-                $partida->debe = $totales['haber'];
-                $partida->haber = $totales['debe'];
-                $saldo += $totales['haber'] - $totales['debe'];
-
-                if (false === $partida->save()) {
-                    Tools::log()->error('error-guardar-partida-igic-soportado');
-                    $continuar = false;
-                }
-            }
-        }
-
-        // Partidas del IGIC repercutido
-        foreach ($this->helper->getSubcuentasEspeciales('IVAREP', $eje->codejercicio) as $sctaIGICRep) {
-            $partida = new Partida();
-            $partida->idasiento = $asiento->idasiento;
-            $partida->concepto = $asiento->concepto;
-            $partida->coddivisa = $sctaIGICRep->coddivisa;
-            $partida->codsubcuenta = $sctaIGICRep->codsubcuenta;
-            $partida->idsubcuenta = $sctaIGICRep->idsubcuenta;
-
-            $totales = $this->helper->getTotalesSubcuenta(
-                $sctaIGICRep->idsubcuenta,
-                $this->fechaDesde,
-                $this->fechaHasta
-            );
-
-            if ($totales['saldo'] != 0) {
-                $partida->debe = $totales['haber'];
-                $partida->haber = $totales['debe'];
-                $saldo += $totales['haber'] - $totales['debe'];
-
-                if (false === $partida->save()) {
-                    Tools::log()->error('error-guardar-partida-igic-repercutido');
-                    $continuar = false;
-                }
-            }
-        }
-
-        if ($continuar) {
-            // Partida de cierre (acreedor o deudor)
-            if ($saldo > 0) {
-                $sctaAcr = $this->helper->getSubcuentaEspecial('IVAACR', $eje->codejercicio);
-                if ($sctaAcr) {
-                    $partida = new Partida();
-                    $partida->idasiento = $asiento->idasiento;
-                    $partida->concepto = $asiento->concepto;
-                    $partida->coddivisa = $sctaAcr->coddivisa;
-                    $partida->codsubcuenta = $sctaAcr->codsubcuenta;
-                    $partida->idsubcuenta = $sctaAcr->idsubcuenta;
-                    $partida->debe = 0;
-                    $partida->haber = $saldo;
-
-                    if (false === $partida->save()) {
-                        Tools::log()->error('error-guardar-partida-igic-acreedor');
-                        $continuar = false;
-                    }
-                } else {
-                    Tools::log()->error('subcuenta-acreedora-no-encontrada');
-                    $continuar = false;
-                }
-            } elseif ($saldo < 0) {
-                $sctaDeu = $this->helper->getSubcuentaEspecial('IVADEU', $eje->codejercicio);
-                if ($sctaDeu) {
-                    $partida = new Partida();
-                    $partida->idasiento = $asiento->idasiento;
-                    $partida->concepto = $asiento->concepto;
-                    $partida->coddivisa = $sctaDeu->coddivisa;
-                    $partida->codsubcuenta = $sctaDeu->codsubcuenta;
-                    $partida->idsubcuenta = $sctaDeu->idsubcuenta;
-                    $partida->debe = abs($saldo);
-                    $partida->haber = 0;
-
-                    if (false === $partida->save()) {
-                        Tools::log()->error('error-guardar-partida-igic-deudor');
-                        $continuar = false;
-                    }
-                } else {
-                    Tools::log()->error('subcuenta-deudora-no-encontrada');
-                    $continuar = false;
-                }
-            }
-        }
-
-        if ($continuar) {
-            // Recalcular importe del asiento
-            $asiento->fix();
-
-            // Guardar la regularización
-            $regiva = new RegularizacionImpuesto();
-            $regiva->codejercicio = $eje->codejercicio;
-            $regiva->fechaasiento = $asiento->fecha;
-            $regiva->fechafin = $this->fechaHasta;
-            $regiva->fechainicio = $this->fechaDesde;
-            $regiva->idasiento = $asiento->idasiento;
-            $regiva->periodo = $periodo;
-
-            if ($regiva->save()) {
-                // Guardar modelo fiscal y facturas
-                $this->guardarDeclaracionIGIC($regiva, $eje->codejercicio, $periodo);
-                Tools::log()->notice('regularizacion-guardada', ['%url%' => $regiva->url()]);
-            } else {
-                $asiento->delete();
-                Tools::log()->error('error-guardar-regularizacion');
-            }
-        } else {
-            $asiento->delete();
-        }
+        Tools::log()->notice('regularizacion-guardada');
+        $this->loadRegiva((int) $regiva->idregiva);
     }
 
-    /**
-     * Guarda la declaración IGIC y las facturas asociadas.
-     */
-    protected function guardarDeclaracionIGIC(
-        RegularizacionImpuesto $regiva,
-        string $codejercicio,
-        string $periodo
-    ): void {
-        $modelo = new DeclaracionIGIC();
-        $modelo->tipo = '420';
-        $modelo->periodo = $periodo;
-        $modelo->codejercicio = $codejercicio;
-        $modelo->fechainicio = $regiva->fechainicio;
-        $modelo->fechafin = $regiva->fechafin;
-        $modelo->idregiva = $regiva->idregiva;
-        $modelo->totaldevengado = $this->totalDevengado();
-        $modelo->totaldeducible = $this->totalDeducible();
-        $modelo->resultado = $modelo->totaldevengado - $modelo->totaldeducible;
-        $modelo->estado = 'borrador';
-
-        if ($modelo->save()) {
-            $this->guardarFacturasModelo($modelo);
-        }
-    }
-
-    /**
-     * Guarda las facturas incluidas en el modelo fiscal.
-     */
-    protected function guardarFacturasModelo(DeclaracionIGIC $modelo): void
+    protected function loadRegiva(int $id): void
     {
-        // Facturas de cliente (ventas - IGIC devengado)
-        $facturaCliente = new FacturaCliente();
-        $where = [
-            new DataBaseWhere('fecha', $modelo->fechainicio, '>='),
-            new DataBaseWhere('fecha', $modelo->fechafin, '<='),
-        ];
-        foreach ($facturaCliente->all($where) as $factura) {
-            $mf = DeclaracionIGICFactura::fromFacturaCliente($factura, $modelo->idmodelo);
-            $mf->save();
+        $regiva = new RegularizacionImpuesto();
+        if (false === $regiva->load($id)) {
+            Tools::log()->warning('regularizacion-no-encontrada');
+            return;
         }
 
-        // Facturas de proveedor (compras - IGIC deducible)
-        $facturaProveedor = new FacturaProveedor();
-        foreach ($facturaProveedor->all($where) as $factura) {
-            $mf = DeclaracionIGICFactura::fromFacturaProveedor($factura, $modelo->idmodelo);
-            $mf->save();
-        }
+        $this->selectedRegiva = $regiva;
+        $this->declaracion = RegularizacionIGIC::getDeclaracion($id);
     }
 
     /**
-     * Obtiene el modelo fiscal asociado a una regularización.
-     */
-    protected function getDeclaracionIGICPorRegiva(int $idregiva): ?DeclaracionIGIC
-    {
-        $modelo = new DeclaracionIGIC();
-        $where = [new DataBaseWhere('idregiva', $idregiva)];
-        $modelos = $modelo->all($where, [], 0, 1);
-        return empty($modelos) ? null : $modelos[0];
-    }
-
-    /**
-     * Obtiene las facturas de cliente del modelo fiscal seleccionado.
-     */
-    public function getFacturasClienteModelo(): array
-    {
-        return $this->declaracion ? $this->declaracion->getFacturasCliente() : [];
-    }
-
-    /**
-     * Obtiene las facturas de proveedor del modelo fiscal seleccionado.
-     */
-    public function getFacturasProveedorModelo(): array
-    {
-        return $this->declaracion ? $this->declaracion->getFacturasProveedor() : [];
-    }
-
-    /**
-     * Elimina una regularización.
-     */
-    protected function eliminarRegiva(int $id): void
-    {
-        $regiva = $this->regiva->get($id);
-        if ($regiva && $regiva->delete()) {
-            Tools::log()->notice('regularizacion-eliminada');
-        } else {
-            Tools::log()->error('error-eliminar-regularizacion');
-        }
-    }
-
-    /**
-     * Marca el modelo fiscal como presentado.
+     * Marca la declaración seleccionada como presentada.
      */
     protected function marcarPresentado(): void
     {
-        $numeroReferencia = $this->request()->request->get('numeroreferencia', '');
-        $fechaPresentacion = $this->request()->request->get('fechapresentacion', date('Y-m-d'));
+        $numeroReferencia = $this->request()->input('numeroreferencia', '');
+        $fechaPresentacion = $this->request()->input('fechapresentacion') ?: Tools::date();
 
         if ($this->declaracion->marcarPresentado($numeroReferencia ?: null, $fechaPresentacion)) {
             Tools::log()->notice('modelo-marcado-presentado');
-        } else {
-            Tools::log()->error('error-marcar-presentado');
-        }
-    }
-
-    /**
-     * Crea un modelo rectificativo.
-     */
-    protected function crearRectificativo(): void
-    {
-        $nuevoModelo = $this->declaracion->crearRectificativo();
-        if ($nuevoModelo) {
-            $this->declaracion = $nuevoModelo;
-            Tools::log()->notice('modelo-rectificativo-creado');
-        } else {
-            Tools::log()->error('error-crear-rectificativo');
-        }
-    }
-
-    /**
-     * Genera y descarga el fichero ATC para presentación telemática.
-     */
-    protected function descargarATC(): void
-    {
-        $generator = new ATCFileGenerator($this->declaracion);
-
-        // Obtener el desglose de IGIC
-        $desgloseVentas = $this->helper->desgloseIGICVentas(
-            $this->declaracion->fechainicio,
-            $this->declaracion->fechafin
-        );
-        $desgloseCompras = $this->helper->desgloseIGICCompras(
-            $this->declaracion->fechainicio,
-            $this->declaracion->fechafin
-        );
-
-        $generator->setDesgloseVentas($desgloseVentas)
-            ->setDesgloseCompras($desgloseCompras);
-
-        $filename = $generator->getFilename();
-        $content = $generator->generate();
-
-        // Enviar cabeceras HTTP para descarga
-        header('Content-Type: application/octet-stream');
-        header('Content-Disposition: attachment; filename="' . $filename . '"');
-        header('Content-Length: ' . strlen($content));
-        header('Cache-Control: no-cache, must-revalidate');
-        header('Pragma: no-cache');
-
-        echo $content;
-        exit;
-    }
-
-    /**
-     * Obtiene el ejercicio que contiene la fecha indicada.
-     *
-     * @param string $fecha      Fecha a buscar
-     * @param bool   $onlyOpened Solo ejercicios abiertos
-     *
-     * @return Ejercicio|false
-     */
-    protected function getEjercicioByFecha(string $fecha, bool $onlyOpened = false)
-    {
-        $ejercicio = new Ejercicio();
-        $where = [
-            new DataBaseWhere('fechainicio', $fecha, '<='),
-            new DataBaseWhere('fechafin', $fecha, '>='),
-        ];
-
-        if ($onlyOpened) {
-            $where[] = new DataBaseWhere('estado', 'ABIERTO');
+            return;
         }
 
-        $ejercicios = $ejercicio->all($where, [], 0, 1);
-        return empty($ejercicios) ? false : $ejercicios[0];
+        Tools::log()->error('error-marcar-presentado');
     }
 }

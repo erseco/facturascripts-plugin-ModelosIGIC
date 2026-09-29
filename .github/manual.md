@@ -29,14 +29,25 @@ ModelosIGIC añade a FacturaScripts el **Modelo 420** (autoliquidación trimestr
 ## Modelo 420 (trimestral)
 
 1. Ve a **Informes → Modelo 420** y pulsa **Nueva regularización**.
-2. Elige el **ejercicio** y el **trimestre** y pulsa **Calcular**. Verás el IGIC devengado y el
-   deducible por tipo impositivo, el resultado y la previsualización del asiento.
+2. Elige el **trimestre** (las fechas se rellenan solas y puedes ajustarlas) y pulsa
+   **Calcular**. Verás la previsualización del asiento de regularización.
 3. Pulsa **Guardar**. Se crea la regularización, el asiento contable y la declaración en estado
-   *borrador* con las facturas incluidas.
+   *borrador* con las facturas incluidas. Al abrir la regularización verás el IGIC devengado y
+   el deducible por tipo impositivo, el resultado y las partidas del asiento.
+
+   El plugin no deja guardar si hay facturas del período sin asiento contable, si ya existe una
+   regularización que se solapa con esas fechas o si faltan las subcuentas especiales de
+   Hacienda Pública. En esos casos no se crea nada.
 4. Descarga el fichero **.dec** y preséntalo en la
    [sede electrónica de la ATC](https://sede.gobiernodecanarias.org/tributos/).
 5. Pulsa **Marcar como presentado** e indica el número de referencia de la ATC y la fecha de
    presentación.
+
+### Eliminar una regularización
+
+Mientras la declaración esté en *borrador* puedes pulsar **Eliminar**: se borran la
+regularización, su asiento y la declaración. Una declaración presentada o rectificada no se
+puede eliminar.
 
 ### Declaración rectificativa
 
