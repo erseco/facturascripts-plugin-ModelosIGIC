@@ -268,13 +268,47 @@ trait ModelosIGICFixtures
         return $impuesto;
     }
 
-    private function primerCodigo(array $modelos, string $campo): ?string
+    private function coddivisa(): string
     {
-        foreach ($modelos as $modelo) {
-            return $modelo->{$campo};
+        $divisa = new Divisa();
+        if (false === $divisa->load('EUR')) {
+            $divisa->coddivisa = 'EUR';
+            $divisa->descripcion = 'Euro';
+            $divisa->simbolo = '€';
+            $divisa->tasaconv = 1;
+            $divisa->tasaconvcompra = 1;
+            $this->assertTrue($divisa->save());
         }
 
-        return null;
+        return 'EUR';
+    }
+
+    private function codpago(): string
+    {
+        foreach (FormaPago::all([], ['codpago' => 'ASC'], 0, 1) as $formaPago) {
+            return (string) $formaPago->codpago;
+        }
+
+        $formaPago = new FormaPago();
+        $formaPago->codpago = 'CONT';
+        $formaPago->descripcion = 'Contado';
+        $this->assertTrue($formaPago->save());
+
+        return 'CONT';
+    }
+
+    private function codserie(): string
+    {
+        foreach (Serie::all([], ['codserie' => 'ASC'], 0, 1) as $serie) {
+            return (string) $serie->codserie;
+        }
+
+        $serie = new Serie();
+        $serie->codserie = 'A';
+        $serie->descripcion = 'Serie general';
+        $this->assertTrue($serie->save());
+
+        return 'A';
     }
 
     /**
@@ -286,11 +320,9 @@ trait ModelosIGICFixtures
         $factura->codalmacen = $this->codalmacen();
 
         // las instalaciones mínimas de CI no tienen serie, forma de pago ni divisa por defecto
-        $series = Serie::all([], ['codserie' => 'ASC'], 0, 1);
-        $factura->codserie = $factura->codserie ?: $this->primerCodigo($series, 'codserie');
-        $factura->codpago = $factura->codpago ?: $this->primerCodigo(FormaPago::all([], [], 0, 1), 'codpago');
-        $divisas = Divisa::all([Where::eq('coddivisa', 'EUR')]);
-        $factura->coddivisa = $factura->coddivisa ?: $this->primerCodigo($divisas, 'coddivisa');
+        $factura->codserie = $factura->codserie ?: $this->codserie();
+        $factura->codpago = $factura->codpago ?: $this->codpago();
+        $factura->coddivisa = $factura->coddivisa ?: $this->coddivisa();
         $this->assertTrue($factura->save(), $this->recentLog());
 
         $impuesto = $this->impuesto($tipo);
