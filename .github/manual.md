@@ -3,8 +3,10 @@
 ModelosIGIC añade a FacturaScripts el **Modelo 420** (autoliquidación trimestral del IGIC) y el
 **Modelo 425** (declaración-resumen anual del IGIC) de la **Agencia Tributaria Canaria (ATC)**.
 
-> La revisión de la normativa vigente está en curso. Antes de presentar una declaración,
-> contrasta los importes con el programa de ayuda de la ATC o con tu asesor.
+> Cada regla que aplica el plugin cita su fuente oficial (BOC, BOE e instrucciones de la ATC) en
+> [NORMATIVA.md](https://github.com/erseco/facturascripts-plugin-ModelosIGIC/blob/main/doc/NORMATIVA.md), donde también se listan los puntos pendientes de
+> verificar. Antes de presentar una declaración, revísala en el programa de ayuda de la ATC o con
+> tu asesor.
 
 ---
 
@@ -40,7 +42,7 @@ ModelosIGIC añade a FacturaScripts el **Modelo 420** (autoliquidación trimestr
    inversión, importaciones, prorrata, regímenes especiales, compensaciones de períodos
    anteriores...) hay que revisarlas y completarlas en el programa de ayuda de la ATC. Las líneas
    de factura que no son de IGIC o tienen una causa de exención se muestran aparte para que las
-   revises. Las fuentes de cada regla están en `doc/NORMATIVA.md` del repositorio.
+   revises. Las fuentes de cada regla están en [NORMATIVA.md](https://github.com/erseco/facturascripts-plugin-ModelosIGIC/blob/main/doc/NORMATIVA.md).
 
    El plugin no deja guardar si hay facturas del período sin asiento contable, si ya existe una
    regularización que se solapa con esas fechas o si faltan las subcuentas especiales de
@@ -53,7 +55,8 @@ ModelosIGIC añade a FacturaScripts el **Modelo 420** (autoliquidación trimestr
    mismo ejercicio (opción *Importar declaraciones*), revisa el área de errores, completa las
    casillas que el plugin no calcula y presenta la declaración desde el programa. Solo está
    disponible para los ejercicios 2025 y 2026, que son los que tienen programa de ayuda
-   verificado. El Modelo 425 no tiene fichero.
+   verificado. El Modelo 425 no tiene fichero. La guía paso a paso para importar y validar el
+   fichero está en [VALIDAR_FICHERO_ATC.md](https://github.com/erseco/facturascripts-plugin-ModelosIGIC/blob/main/doc/VALIDAR_FICHERO_ATC.md).
 5. Pulsa **Marcar como presentado** e indica el número de referencia de la ATC y la fecha de
    presentación.
 
@@ -91,5 +94,5 @@ compra incluidas; el botón del fichero lleva a la pantalla del Modelo 420 de es
 
 ## Normativa
 
-Las referencias a la normativa aplicada se recogen en `doc/NORMATIVA.md`, en el repositorio del
-plugin.
+Las referencias a la normativa aplicada se recogen en
+[NORMATIVA.md](https://github.com/erseco/facturascripts-plugin-ModelosIGIC/blob/main/doc/NORMATIVA.md), en el repositorio del plugin.

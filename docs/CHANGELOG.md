@@ -2,9 +2,11 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 FacturaScripts requiere versiones enteras o con un solo decimal, por lo que
-la primera versión publicada será la `1.0` (etiqueta `1.0`).
+la primera versión publicada es la `1.0` (etiqueta `1.0`).
 
 ## [Unreleased]
+
+## [1.0] - 2026-09-29
 
 ### Added
 
