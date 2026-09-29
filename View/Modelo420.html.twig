@@ -78,106 +78,36 @@
                         </div>
                     </div>
 
-                    {# Resumen IGIC #}
-                    <div class="card mb-3">
-                        <div class="card-header">
-                            <i class="fa-solid fa-calculator fa-fw"></i> {{ i18n.trans('igic-devengado') }}
-                        </div>
-                        <div class="card-body p-0">
-                            <div class="table-responsive">
-                                <table class="table table-hover mb-0">
-                                    <thead class="table-light">
-                                        <tr>
-                                            <th class="text-end">{{ i18n.trans('base-imponible') }}</th>
-                                            <th class="text-end">{{ i18n.trans('tipo') }}</th>
-                                            <th class="text-end">{{ i18n.trans('cuota') }}</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {% set devengado = 0 %}
-                                        {% for item in fsc.desgloseIGICVentas() %}
-                                            {% set cuota = item.totaliva + item.totalrecargo %}
-                                            {% set devengado = devengado + cuota %}
-                                            <tr>
-                                                <td class="text-end">{{ money(item.neto) }}</td>
-                                                <td class="text-end">{{ item.iva }} %</td>
-                                                <td class="text-end">{{ money(cuota) }}</td>
-                                            </tr>
-                                        {% else %}
-                                            <tr>
-                                                <td colspan="3" class="text-muted">{{ i18n.trans('sin-datos') }}</td>
-                                            </tr>
-                                        {% endfor %}
-                                    </tbody>
-                                    <tfoot class="table-info">
-                                        <tr>
-                                            <td colspan="2" class="text-end"><strong>{{ i18n.trans('total') }}</strong></td>
-                                            <td class="text-end"><strong>{{ money(devengado) }}</strong></td>
-                                        </tr>
-                                    </tfoot>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
+                    {% set casillas = fsc.casillas() %}
+                    {% include 'Block/CasillasIGIC.html.twig' with {
+                        'casillas': casillas,
+                        'modelo': '420',
+                        'excluidasVentas': fsc.excluidasVentas(),
+                        'excluidasCompras': fsc.excluidasCompras()
+                    } %}
 
-                    <div class="card mb-3">
-                        <div class="card-header">
-                            <i class="fa-solid fa-receipt fa-fw"></i> {{ i18n.trans('igic-deducible') }}
-                        </div>
-                        <div class="card-body p-0">
-                            <div class="table-responsive">
-                                <table class="table table-hover mb-0">
-                                    <thead class="table-light">
-                                        <tr>
-                                            <th class="text-end">{{ i18n.trans('base-imponible') }}</th>
-                                            <th class="text-end">{{ i18n.trans('tipo') }}</th>
-                                            <th class="text-end">{{ i18n.trans('cuota') }}</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {% set deducible = 0 %}
-                                        {% for item in fsc.desgloseIGICCompras() %}
-                                            {% set cuota = item.totaliva + item.totalrecargo %}
-                                            {% set deducible = deducible + cuota %}
-                                            <tr>
-                                                <td class="text-end">{{ money(item.neto) }}</td>
-                                                <td class="text-end">{{ item.iva }} %</td>
-                                                <td class="text-end">{{ money(cuota) }}</td>
-                                            </tr>
-                                        {% else %}
-                                            <tr>
-                                                <td colspan="3" class="text-muted">{{ i18n.trans('sin-datos') }}</td>
-                                            </tr>
-                                        {% endfor %}
-                                    </tbody>
-                                    <tfoot class="table-info">
-                                        <tr>
-                                            <td colspan="2" class="text-end"><strong>{{ i18n.trans('total') }}</strong></td>
-                                            <td class="text-end"><strong>{{ money(deducible) }}</strong></td>
-                                        </tr>
-                                    </tfoot>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-
-                    {# Resultado #}
+                    {# Resultado (casilla 45) #}
                     <div class="card mb-3">
                         <div class="card-body text-center">
-                            {% set resultado = devengado - deducible %}
-                            <h4>{{ i18n.trans('resultado') }}:</h4>
-                            <h2 class="{% if resultado >= 0 %}text-danger{% else %}text-success{% endif %}">
+                            {% set resultado = casillas.casillas['45'].importe %}
+                            <h4>{{ i18n.trans('casilla-420-45') }}:</h4>
+                            <h2 class="{% if resultado > 0 %}text-danger{% else %}text-success{% endif %}">
                                 {{ money(resultado) }}
                             </h2>
                             <p class="text-muted mb-0">
-                                {% if resultado > 0 %}
-                                    {{ i18n.trans('resultado-a-ingresar') }}
-                                {% elseif resultado < 0 %}
-                                    {{ i18n.trans('resultado-a-compensar') }}
-                                {% else %}
-                                    {{ i18n.trans('resultado-cero') }}
+                                {{ i18n.trans('resultado-tipo-' ~ casillas.resultado) }}
+                                {% if resultado < 0 and fsc.selectedRegiva.periodo == 'T4' %}
+                                    <br>{{ i18n.trans('resultado-devolucion-4t') }}
                                 {% endif %}
                             </p>
+                            {% set plazo = fsc.plazo() %}
+                            {% if plazo is not empty %}
+                                <p class="small text-muted mt-2 mb-0">
+                                    {{ i18n.trans('plazo-presentacion') }}:
+                                    {{ plazo.desde|date('d-m-Y') }} – {{ plazo.hasta|date('d-m-Y') }}
+                                    ({{ i18n.trans('plazo-fuente-420') }})
+                                </p>
+                            {% endif %}
                         </div>
                     </div>
                 </div>
@@ -465,15 +395,23 @@
                             </div>
                         </div>
                         <div class="row mb-3">
+                            <label for="anyo" class="col-sm-3 col-form-label">{{ i18n.trans('ejercicio') }}</label>
+                            <div class="col-sm-9">
+                                <input type="number" name="anyo" id="anyo" class="form-control" min="2000" max="2999"
+                                       value="{{ fsc.fechaDesde|date('Y') }}" onchange="cambiarFechas()" required>
+                            </div>
+                        </div>
+                        <div class="row mb-3">
                             <label for="desde" class="col-sm-3 col-form-label">{{ i18n.trans('desde') }}</label>
                             <div class="col-sm-9">
-                                <input type="date" name="desde" id="desde" class="form-control" value="{{ fsc.fechaDesde }}">
+                                <input type="date" id="desde" class="form-control" value="{{ fsc.fechaDesde }}" readonly>
                             </div>
                         </div>
                         <div class="row mb-3">
                             <label for="hasta" class="col-sm-3 col-form-label">{{ i18n.trans('hasta') }}</label>
                             <div class="col-sm-9">
-                                <input type="date" name="hasta" id="hasta" class="form-control" value="{{ fsc.fechaHasta }}">
+                                <input type="date" id="hasta" class="form-control" value="{{ fsc.fechaHasta }}" readonly>
+                                <div class="form-text">{{ i18n.trans('periodo-trimestral-ayuda') }}</div>
                             </div>
                         </div>
                         <div id="divPrevisualizacion">
@@ -530,7 +468,7 @@
     <script>
         function cambiarFechas() {
             const periodo = document.getElementById('periodo').value;
-            const anyo = (document.getElementById('desde').value || '').substring(0, 4) || new Date().getFullYear();
+            const anyo = document.getElementById('anyo').value || new Date().getFullYear();
             let desde, hasta;
 
             switch (periodo) {

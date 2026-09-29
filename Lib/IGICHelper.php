@@ -23,11 +23,13 @@ namespace FacturaScripts\Plugins\ModelosIGIC\Lib;
 
 use FacturaScripts\Core\Base\DataBase;
 use FacturaScripts\Core\Lib\Calculator;
+use FacturaScripts\Core\Lib\OperacionIVA;
 use FacturaScripts\Core\Model\Base\BusinessDocument;
 use FacturaScripts\Core\Tools;
 use FacturaScripts\Core\Where;
 use FacturaScripts\Dinamic\Model\FacturaCliente;
 use FacturaScripts\Dinamic\Model\FacturaProveedor;
+use FacturaScripts\Dinamic\Model\Impuesto;
 use FacturaScripts\Dinamic\Model\Subcuenta;
 
 /**
@@ -46,8 +48,27 @@ use FacturaScripts\Dinamic\Model\Subcuenta;
  */
 class IGICHelper
 {
+    /**
+     * Entrada en vigor del texto refundido (DL 1/2025): disposición final única, día siguiente
+     * a su publicación en el BOC n.º 207 de 20/10/2025. Desde entonces el 3 % se denomina
+     * «superreducido» y el 5 % «reducido» (exposición de motivos del DL 1/2025).
+     */
+    public const FECHA_TEXTO_REFUNDIDO = '2025-10-21';
+
+    /**
+     * Efectos del tipo específico del 1 % creado por la Ley 9/2025 (disposición final novena,
+     * BOC n.º 256 de 29/12/2025): 01/01/2026.
+     */
+    public const FECHA_TIPO_ESPECIFICO = '2026-01-01';
+
+    /** Periodos de liquidación del Modelo 420 (Decreto 268/2011, art. 57.5: trimestre natural). */
+    public const PERIODOS_420 = ['T1', 'T2', 'T3', 'T4'];
+
     /** @var DataBase */
     protected DataBase $db;
+
+    /** @var Impuesto[] */
+    private array $impuestos = [];
 
     public function __construct()
     {
@@ -65,9 +86,15 @@ class IGICHelper
      */
     public function desgloseIGICCompras(string $fechaInicio, string $fechaFin, ?int $idempresa = null): array
     {
-        return $this->desglose(
-            FacturaProveedor::all($this->whereFacturas($fechaInicio, $fechaFin, $idempresa), ['idfactura' => 'ASC'])
-        );
+        return $this->analizar($this->facturasProveedor($fechaInicio, $fechaFin, $idempresa))['igic'];
+    }
+
+    /**
+     * Resumen de las líneas de compra del período que no se incluyen en el cálculo del IGIC.
+     */
+    public function excluidasCompras(string $fechaInicio, string $fechaFin, ?int $idempresa = null): array
+    {
+        return $this->analizar($this->facturasProveedor($fechaInicio, $fechaFin, $idempresa))['excluidas'];
     }
 
     /**
@@ -81,9 +108,15 @@ class IGICHelper
      */
     public function desgloseIGICVentas(string $fechaInicio, string $fechaFin, ?int $idempresa = null): array
     {
-        return $this->desglose(
-            FacturaCliente::all($this->whereFacturas($fechaInicio, $fechaFin, $idempresa), ['idfactura' => 'ASC'])
-        );
+        return $this->analizar($this->facturasCliente($fechaInicio, $fechaFin, $idempresa))['igic'];
+    }
+
+    /**
+     * Resumen de las líneas de venta del período que no se incluyen en el cálculo del IGIC.
+     */
+    public function excluidasVentas(string $fechaInicio, string $fechaFin, ?int $idempresa = null): array
+    {
+        return $this->analizar($this->facturasCliente($fechaInicio, $fechaFin, $idempresa))['excluidas'];
     }
 
     /**
@@ -97,40 +130,62 @@ class IGICHelper
      */
     public function hayFacturasSinAsiento(string $fechaInicio, string $fechaFin, ?int $idempresa = null): bool
     {
-        $where = $this->whereFacturas($fechaInicio, $fechaFin, $idempresa);
+        $where = static::wherePeriodo($fechaInicio, $fechaFin, $idempresa);
         $where[] = Where::isNull('idasiento');
 
         return FacturaProveedor::count($where) > 0 || FacturaCliente::count($where) > 0;
     }
 
     /**
-     * Agrupa por tipo de IGIC y recargo los subtotales de impuestos de las facturas.
+     * Separa las líneas de las facturas en IGIC y excluidas, y agrupa las de IGIC por tipo.
      *
-     * Usa Calculator::getSubtotals(), el mismo cálculo que hace el núcleo para
-     * los totales de cada factura (descuentos globales incluidos).
+     * Solo entran en el cálculo las líneas cuyo impuesto tiene la operación IGIC del núcleo
+     * (OperacionIVA::ES_OPERATION_03) y que no tienen causa de exención. Las causas de exención
+     * del núcleo citan la Ley del IVA, no la Ley 20/1991, así que no se asignan a ninguna casilla
+     * del modelo: se informan aparte para que el usuario las revise (doc/NORMATIVA.md).
+     *
+     * Los importes de cada factura se calculan con Calculator::getSubtotals(), el mismo cálculo
+     * que hace el núcleo para los totales de la factura (descuentos globales incluidos).
      *
      * @param BusinessDocument[] $facturas
+     *
+     * @return array{igic: array, excluidas: array}
      */
-    protected function desglose(array $facturas): array
+    protected function analizar(array $facturas): array
     {
         $desglose = [];
+        $excluidas = [];
         foreach ($facturas as $factura) {
-            $subtotals = Calculator::getSubtotals($factura, $factura->getLines());
-            foreach ($subtotals['iva'] as $item) {
-                $key = (float) $item['iva'] . '|' . (float) $item['recargo'];
-                if (false === isset($desglose[$key])) {
-                    $desglose[$key] = [
-                        'iva' => (float) $item['iva'],
-                        'recargo' => (float) $item['recargo'],
-                        'neto' => 0.0,
-                        'totaliva' => 0.0,
-                        'totalrecargo' => 0.0,
-                    ];
+            $lineasIGIC = [];
+            $lineasExcluidas = [];
+            foreach ($factura->getLines() as $linea) {
+                if ($linea->suplido || empty($linea->pvptotal)) {
+                    continue;
                 }
 
-                $desglose[$key]['neto'] += (float) $item['neto'];
-                $desglose[$key]['totaliva'] += (float) $item['totaliva'];
-                $desglose[$key]['totalrecargo'] += (float) $item['totalrecargo'];
+                if ($this->esLineaIGIC($linea)) {
+                    $lineasIGIC[] = $linea;
+                    continue;
+                }
+
+                $lineasExcluidas[] = $linea;
+            }
+
+            if (false === empty($lineasIGIC)) {
+                $this->acumular($desglose, Calculator::getSubtotals($factura, $lineasIGIC));
+            }
+
+            foreach ($lineasExcluidas as $linea) {
+                $motivo = empty($linea->excepcioniva) ? 'impuesto' : 'excepcion';
+                $codigo = empty($linea->excepcioniva) ? (string) $linea->codimpuesto : (string) $linea->excepcioniva;
+                $key = $motivo . '|' . $codigo;
+                if (false === isset($excluidas[$key])) {
+                    $excluidas[$key] = ['motivo' => $motivo, 'codigo' => $codigo, 'lineas' => 0, 'neto' => 0.0];
+                }
+
+                $subtotals = Calculator::getSubtotals($factura, [$linea]);
+                $excluidas[$key]['lineas']++;
+                $excluidas[$key]['neto'] += (float) $subtotals['neto'];
             }
         }
 
@@ -144,21 +199,57 @@ class IGICHelper
             $desglose[$i]['totalrecargo'] = Tools::round($item['totalrecargo']);
         }
 
-        return $desglose;
+        ksort($excluidas);
+        foreach ($excluidas as $key => $item) {
+            $excluidas[$key]['neto'] = Tools::round($item['neto']);
+        }
+
+        return ['igic' => $desglose, 'excluidas' => array_values($excluidas)];
     }
 
     /**
-     * Filtro de facturas por rango de fechas y, opcionalmente, empresa.
-     *
-     * TODO fase 3 (normativa): confirmar si el período debe filtrarse por la fecha
-     * de expedición (fecha) o por la de devengo (fechadevengo) de la factura.
+     * Indica si una línea tributa por IGIC según la operación de su impuesto.
      */
-    protected function whereFacturas(string $fechaInicio, string $fechaFin, ?int $idempresa): array
+    protected function esLineaIGIC($linea): bool
+    {
+        if (false === empty($linea->excepcioniva) || empty($linea->codimpuesto)) {
+            return false;
+        }
+
+        $codimpuesto = (string) $linea->codimpuesto;
+        if (false === array_key_exists($codimpuesto, $this->impuestos)) {
+            $impuesto = new Impuesto();
+            $this->impuestos[$codimpuesto] = $impuesto->load($codimpuesto) ? $impuesto : null;
+        }
+
+        return $this->impuestos[$codimpuesto] !== null
+            && $this->impuestos[$codimpuesto]->operacion === OperacionIVA::ES_OPERATION_03;
+    }
+
+    /**
+     * Filtro de facturas del período de liquidación y, opcionalmente, de una empresa.
+     *
+     * Las operaciones se imputan al período en que se devengan: el modelo 420 declara el IGIC
+     * devengado en el período y remite a la regla general de devengo del artículo 18 de la
+     * Ley 20/1991 (Instrucciones del modelo 420, apdos. 7 y 9). Se usa la fecha de devengo de
+     * la factura y, si no la tiene, su fecha, el mismo criterio que usa el núcleo para la fecha
+     * del asiento contable de la factura (InvoiceToAccounting).
+     */
+    public static function wherePeriodo(string $fechaInicio, string $fechaFin, ?int $idempresa): array
     {
         $where = [
-            Where::gte('fecha', $fechaInicio),
-            Where::lte('fecha', $fechaFin),
+            Where::sub([
+                Where::isNotNull('fechadevengo'),
+                Where::gte('fechadevengo', $fechaInicio),
+                Where::lte('fechadevengo', $fechaFin),
+            ]),
+            Where::orSub([
+                Where::isNull('fechadevengo'),
+                Where::gte('fecha', $fechaInicio),
+                Where::lte('fecha', $fechaFin),
+            ]),
         ];
+        $where = [Where::sub($where)];
         if (null !== $idempresa) {
             $where[] = Where::eq('idempresa', $idempresa);
         }
@@ -167,13 +258,49 @@ class IGICHelper
     }
 
     /**
+     * @return FacturaCliente[]
+     */
+    protected function facturasCliente(string $fechaInicio, string $fechaFin, ?int $idempresa): array
+    {
+        return FacturaCliente::all(static::wherePeriodo($fechaInicio, $fechaFin, $idempresa), ['idfactura' => 'ASC']);
+    }
+
+    /**
+     * @return FacturaProveedor[]
+     */
+    protected function facturasProveedor(string $fechaInicio, string $fechaFin, ?int $idempresa): array
+    {
+        return FacturaProveedor::all(
+            static::wherePeriodo($fechaInicio, $fechaFin, $idempresa),
+            ['idfactura' => 'ASC']
+        );
+    }
+
+    private function acumular(array &$desglose, array $subtotals): void
+    {
+        foreach ($subtotals['iva'] as $item) {
+            $key = (float) $item['iva'] . '|' . (float) $item['recargo'];
+            if (false === isset($desglose[$key])) {
+                $desglose[$key] = [
+                    'iva' => (float) $item['iva'],
+                    'recargo' => (float) $item['recargo'],
+                    'neto' => 0.0,
+                    'totaliva' => 0.0,
+                    'totalrecargo' => 0.0,
+                ];
+            }
+
+            $desglose[$key]['neto'] += (float) $item['neto'];
+            $desglose[$key]['totaliva'] += (float) $item['totaliva'];
+            $desglose[$key]['totalrecargo'] += (float) $item['totalrecargo'];
+        }
+    }
+
+    /**
      * Calcula el período trimestral por defecto según la fecha actual.
      *
-     * Plazos de presentación del Modelo 420:
-     * - T1 (enero-marzo): del 1 al 20 de abril
-     * - T2 (abril-junio): del 1 al 20 de julio
-     * - T3 (julio-septiembre): del 1 al 20 de octubre
-     * - T4 (octubre-diciembre): del 1 al 30 de enero del año siguiente
+     * Durante el plazo de presentación de un trimestre (Decreto 268/2011, art. 57.6) propone
+     * ese trimestre; el resto del tiempo, el trimestre en curso.
      *
      * @return array Array con 'periodo', 'fecha_desde' y 'fecha_hasta'
      */
@@ -405,54 +532,131 @@ class IGICHelper
     }
 
     /**
-     * Calcula el total del IGIC devengado (repercutido en ventas).
+     * Calcula el total de las cuotas de IGIC devengadas (repercutidas en ventas).
+     *
+     * Solo suma cuotas de IGIC. No suma recargos: en el IGIC el único recargo es el del régimen
+     * especial de comerciantes minoristas, que grava las importaciones y se liquida con el IGIC
+     * de la importación (DL 1/2025, art. 70.Uno.a); no tiene casilla en el modelo 420.
      *
      * @param array $desgloseVentas Array del desglose de ventas
-     *
-     * @return float Total IGIC devengado
      */
     public function calcularTotalDevengado(array $desgloseVentas): float
     {
-        $total = 0.0;
-        foreach ($desgloseVentas as $item) {
-            $total += $item['totaliva'] + $item['totalrecargo'];
-        }
-        return $total;
+        return $this->sumar($desgloseVentas, 'totaliva');
     }
 
     /**
-     * Calcula el total del IGIC deducible (soportado en compras).
+     * Calcula el total de las cuotas de IGIC soportadas en compras.
+     *
+     * No suma recargos (DL 1/2025, art. 70.Uno.a); ver calcularTotalDevengado().
      *
      * @param array $desgloseCompras Array del desglose de compras
-     *
-     * @return float Total IGIC deducible
      */
     public function calcularTotalDeducible(array $desgloseCompras): float
     {
-        $total = 0.0;
-        foreach ($desgloseCompras as $item) {
-            $total += $item['totaliva'] + $item['totalrecargo'];
-        }
-        return $total;
+        return $this->sumar($desgloseCompras, 'totaliva');
     }
 
     /**
-     * Obtiene el nombre descriptivo del tipo de IGIC.
+     * Suma de los recargos que figuran en las facturas del desglose.
      *
-     * @param float $tipo Porcentaje del tipo de IGIC
-     *
-     * @return string Nombre descriptivo
+     * No entran en el modelo (DL 1/2025, art. 70.Uno.a); se muestran como aviso.
      */
-    public function nombreTipoIGIC(float $tipo): string
+    public function calcularTotalRecargo(array $desglose): float
     {
-        return match (true) {
-            $tipo == 0 => Tools::lang()->trans('igic-tipo-cero'),
-            $tipo == 3 => Tools::lang()->trans('igic-tipo-reducido'),
-            $tipo == 7 => Tools::lang()->trans('igic-tipo-general'),
-            $tipo == 9.5 => Tools::lang()->trans('igic-tipo-incrementado'),
-            $tipo == 15 => Tools::lang()->trans('igic-tipo-especial-incrementado'),
-            $tipo == 20 => Tools::lang()->trans('igic-tipo-especial'),
-            default => $tipo . '%',
+        return $this->sumar($desglose, 'totalrecargo');
+    }
+
+    /**
+     * Denominación legal de un tipo de IGIC en la fecha indicada.
+     *
+     * Desde el 21/10/2025, denominaciones del DL 1/2025, art. 32.1 (el 3 % es «superreducido» y
+     * el 5 % «reducido»). El tipo específico del 1 % existe desde el 01/01/2026 (Ley 9/2025,
+     * disposición final novena). Para fechas anteriores al 21/10/2025 solo se muestra el
+     * porcentaje: el plugin no documenta las denominaciones de la Ley 4/2012.
+     *
+     * @param float       $tipo  Porcentaje del tipo de IGIC
+     * @param string|null $fecha Fecha de devengo (Y-m-d); hoy si es null
+     */
+    public function nombreTipoIGIC(float $tipo, ?string $fecha = null): string
+    {
+        $clave = $this->claveTipoIGIC($tipo, $fecha ?? date('Y-m-d'));
+        $porcentaje = Tools::number($tipo, $tipo == (int) $tipo ? 0 : 1) . ' %';
+
+        return null === $clave ? $porcentaje : Tools::lang()->trans($clave) . ' (' . $porcentaje . ')';
+    }
+
+    /**
+     * Indica si el tipo figura en el art. 32.1 del DL 1/2025 vigente en la fecha indicada.
+     *
+     * Devuelve null para fechas anteriores al 21/10/2025, que el plugin no verifica.
+     */
+    public function esTipoVigente(float $tipo, string $fecha): ?bool
+    {
+        if (static::fecha($fecha) < self::FECHA_TEXTO_REFUNDIDO) {
+            return null;
+        }
+
+        return $this->claveTipoIGIC($tipo, $fecha) !== null;
+    }
+
+    /**
+     * Plazo de presentación del Modelo 420 de un trimestre.
+     *
+     * Decreto 268/2011, art. 57.6: los trimestres se presentan durante los veinte primeros días
+     * naturales del mes siguiente, salvo el último del año, que se presenta durante el mes de
+     * enero del año siguiente. El plazo se amplía al siguiente día hábil si termina en día
+     * inhábil (ficha del modelo 420 de la ATC); esa ampliación no se calcula aquí.
+     *
+     * @return array{desde: string, hasta: string}
+     */
+    public function plazoPresentacion(string $periodo, int $anyo): array
+    {
+        return match ($periodo) {
+            'T1' => ['desde' => $anyo . '-04-01', 'hasta' => $anyo . '-04-20'],
+            'T2' => ['desde' => $anyo . '-07-01', 'hasta' => $anyo . '-07-20'],
+            'T3' => ['desde' => $anyo . '-10-01', 'hasta' => $anyo . '-10-20'],
+            // el 425 se presenta junto con el 4T (Decreto 268/2011, art. 57.8)
+            'T4', 'ANUAL' => ['desde' => ($anyo + 1) . '-01-01', 'hasta' => ($anyo + 1) . '-01-31'],
+            default => throw new \InvalidArgumentException('Periodo no válido: ' . $periodo),
         };
+    }
+
+    /**
+     * Clave de traducción de la denominación del tipo, o null si el tipo no tiene denominación
+     * legal verificada en esa fecha.
+     */
+    protected function claveTipoIGIC(float $tipo, string $fecha): ?string
+    {
+        $fecha = static::fecha($fecha);
+        if ($fecha < self::FECHA_TEXTO_REFUNDIDO) {
+            return null;
+        }
+
+        return match (true) {
+            $tipo == 0 => 'igic-tipo-cero',
+            $tipo == 1 && $fecha >= self::FECHA_TIPO_ESPECIFICO => 'igic-tipo-especifico',
+            $tipo == 3 => 'igic-tipo-superreducido',
+            $tipo == 5 => 'igic-tipo-reducido',
+            $tipo == 7 => 'igic-tipo-general',
+            $tipo == 9.5, $tipo == 15 => 'igic-tipo-incrementado',
+            $tipo == 20 => 'igic-tipo-especial',
+            default => null,
+        };
+    }
+
+    protected static function fecha(string $fecha): string
+    {
+        return date('Y-m-d', strtotime($fecha));
+    }
+
+    private function sumar(array $desglose, string $campo): float
+    {
+        $total = 0.0;
+        foreach ($desglose as $item) {
+            $total += (float) $item[$campo];
+        }
+
+        return Tools::round($total);
     }
 }

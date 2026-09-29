@@ -28,11 +28,17 @@ licencia AGPL-3.0 y los créditos de los autores originales.
 
 ## Características
 
-- **Modelo 420** (trimestral): cálculo del IGIC devengado (ventas) y deducible (compras) por
-  tipo impositivo para el trimestre elegido.
+- **Modelo 420** (trimestral): casillas del IGIC devengado (ventas) y deducible (compras) por
+  tipo impositivo para el trimestre elegido, con el estado de cada casilla (calculada, parcial o
+  no calculada) y las líneas que no entran en el cálculo.
+- **Normativa referenciada**: cada tipo, casilla y plazo cita su fuente oficial en
+  [`doc/NORMATIVA.md`](doc/NORMATIVA.md). Lo que el plugin no puede obtener de FacturaScripts
+  (bienes de inversión, importaciones, prorrata, regímenes especiales...) queda marcado para
+  completarlo en el programa de ayuda de la ATC.
 - **Asiento de regularización**: previsualización y creación del asiento contable del
   trimestre.
-- **Modelo 425** (anual): resumen del IGIC devengado y deducible del ejercicio.
+- **Modelo 425** (anual): casillas del resumen anual que se obtienen de las facturas del
+  ejercicio y de los modelos 420 registrados.
 - **Historial de declaraciones** con su estado (borrador, presentado, rectificado), número de
   referencia de la ATC, fecha de presentación y facturas incluidas.
 - **Declaraciones rectificativas** a partir de una declaración ya presentada.
@@ -44,7 +50,7 @@ licencia AGPL-3.0 y los créditos de los autores originales.
 ### Modelo 420
 
 1. Ve a **Informes > Modelo 420**.
-2. Pulsa **Nueva regularización**, elige el trimestre (o ajusta las fechas) y pulsa
+2. Pulsa **Nueva regularización**, elige el trimestre y el ejercicio y pulsa
    **Calcular** para ver la previsualización del asiento.
 3. Pulsa **Guardar** para crear la regularización, el asiento contable y la declaración en
    borrador. Todo se guarda en una sola transacción: si algo falla no queda nada a medias.

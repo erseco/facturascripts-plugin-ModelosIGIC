@@ -27,6 +27,7 @@ use FacturaScripts\Core\Where;
 use FacturaScripts\Dinamic\Model\Ejercicio;
 use FacturaScripts\Dinamic\Model\FacturaCliente;
 use FacturaScripts\Dinamic\Model\FacturaProveedor;
+use FacturaScripts\Plugins\ModelosIGIC\Lib\IGICHelper;
 use Throwable;
 
 /**
@@ -311,13 +312,8 @@ class DeclaracionIGIC extends ModelClass
      */
     public function guardarFacturas(?int $idempresa = null): bool
     {
-        $where = [
-            Where::gte('fecha', $this->fechainicio),
-            Where::lte('fecha', $this->fechafin),
-        ];
-        if (null !== $idempresa) {
-            $where[] = Where::eq('idempresa', $idempresa);
-        }
+        // mismo criterio de período que el cálculo del modelo (fecha de devengo o, si no hay, fecha)
+        $where = IGICHelper::wherePeriodo($this->fechainicio, $this->fechafin, $idempresa);
 
         foreach (FacturaCliente::all($where, ['fecha' => 'ASC', 'idfactura' => 'ASC']) as $factura) {
             if (false === DeclaracionIGICFactura::fromFacturaCliente($factura, (int) $this->idmodelo)->save()) {

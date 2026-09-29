@@ -25,6 +25,7 @@ use FacturaScripts\Core\Template\Controller;
 use FacturaScripts\Core\Tools;
 use FacturaScripts\Core\Where;
 use FacturaScripts\Dinamic\Model\Ejercicio;
+use FacturaScripts\Plugins\ModelosIGIC\Lib\CasillasModelo425;
 use FacturaScripts\Plugins\ModelosIGIC\Lib\IGICHelper;
 use FacturaScripts\Plugins\ModelosIGIC\Model\DeclaracionIGIC;
 use FacturaScripts\Plugins\ModelosIGIC\Model\DeclaracionIGICFactura;
@@ -32,14 +33,10 @@ use FacturaScripts\Plugins\ModelosIGIC\Model\DeclaracionIGICFactura;
 /**
  * Controlador para el Modelo 425 - Declaración-resumen anual del IGIC.
  *
- * El Modelo 425 es la declaración-resumen anual del Impuesto General Indirecto
- * Canario (IGIC) que deben presentar los empresarios y profesionales durante
- * el mes de enero del año siguiente al que se refiera la declaración.
- *
- * Este modelo resume todas las operaciones del ejercicio y debe coincidir con
- * la suma de los cuatro modelos 420 trimestrales presentados durante el año.
- *
- * Plazo de presentación: del 1 al 30 de enero del año siguiente
+ * La declaración-resumen anual se presenta conjuntamente con la autoliquidación del
+ * último período del año (Decreto 268/2011, art. 57.8), es decir, durante el mes de
+ * enero del año siguiente (art. 57.6). No la presentan quienes llevan los libros
+ * registro por el SII (art. 57.8 en relación con el art. 49.5).
  *
  * @see https://www3.gobiernodecanarias.org/tributos/atc/w/modelo-425
  */
@@ -53,6 +50,9 @@ class Modelo425 extends Controller
 
     /** @var ?Ejercicio */
     public ?Ejercicio $selectedEjercicio = null;
+
+    /** @var ?array */
+    private ?array $casillas = null;
 
     /** @var array */
     private array $desgloseCompras = [];
@@ -127,6 +127,70 @@ class Modelo425 extends Controller
             ['fechainicio' => 'DESC'],
             0,
             50
+        );
+    }
+
+    /**
+     * Casillas del Modelo 425 del ejercicio seleccionado.
+     */
+    public function casillas(): array
+    {
+        if (null === $this->casillas && $this->selectedEjercicio !== null) {
+            $this->casillas = (new CasillasModelo425($this->helper))->calcular(
+                $this->desgloseIGICVentas(),
+                $this->desgloseIGICCompras(),
+                $this->selectedEjercicio->fechafin,
+                $this->getModelos420()
+            );
+        }
+
+        return $this->casillas ?? [];
+    }
+
+    /**
+     * Líneas de compra del ejercicio que no entran en el cálculo.
+     */
+    public function excluidasCompras(): array
+    {
+        if ($this->selectedEjercicio === null) {
+            return [];
+        }
+
+        return $this->helper->excluidasCompras(
+            $this->selectedEjercicio->fechainicio,
+            $this->selectedEjercicio->fechafin,
+            (int) $this->selectedEjercicio->idempresa
+        );
+    }
+
+    /**
+     * Líneas de venta del ejercicio que no entran en el cálculo.
+     */
+    public function excluidasVentas(): array
+    {
+        if ($this->selectedEjercicio === null) {
+            return [];
+        }
+
+        return $this->helper->excluidasVentas(
+            $this->selectedEjercicio->fechainicio,
+            $this->selectedEjercicio->fechafin,
+            (int) $this->selectedEjercicio->idempresa
+        );
+    }
+
+    /**
+     * Plazo de presentación del resumen anual (Decreto 268/2011, arts. 57.6 y 57.8).
+     */
+    public function plazo(): array
+    {
+        if ($this->selectedEjercicio === null) {
+            return [];
+        }
+
+        return $this->helper->plazoPresentacion(
+            'ANUAL',
+            (int) date('Y', strtotime($this->selectedEjercicio->fechafin))
         );
     }
 

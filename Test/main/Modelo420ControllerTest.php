@@ -12,6 +12,7 @@
 
 namespace FacturaScripts\Test\Plugins;
 
+use FacturaScripts\Core\Tools;
 use FacturaScripts\Core\Where;
 use FacturaScripts\Dinamic\Model\RegularizacionImpuesto;
 use FacturaScripts\Plugins\ModelosIGIC\Controller\Modelo420;
@@ -46,6 +47,10 @@ final class Modelo420ControllerTest extends TestCase
         $this->assertNull($controller->selectedRegiva);
         $this->assertMatchesRegularExpression('/^T[1-4]$/', $controller->periodo);
         $this->assertIsArray($controller->allRegularizaciones());
+        $this->assertSame([], $controller->casillas());
+        $this->assertSame([], $controller->excluidasVentas());
+        $this->assertSame([], $controller->excluidasCompras());
+        $this->assertNotEmpty($controller->plazo());
     }
 
     public function testCalcularMuestraLaPrevisualizacion(): void
@@ -62,7 +67,7 @@ final class Modelo420ControllerTest extends TestCase
 
     public function testCalcularSinEjercicioAbierto(): void
     {
-        $this->post(['proceso' => 'comprobar', 'desde' => '2190-01-01', 'hasta' => '2190-03-31']);
+        $this->post(['proceso' => 'comprobar', 'periodo' => 'T1', 'desde' => '2190-01-01', 'hasta' => '2190-03-31']);
 
         $controller = new Modelo420('Modelo420', '/Modelo420');
         $this->runController($controller);
@@ -73,7 +78,7 @@ final class Modelo420ControllerTest extends TestCase
     public function testCalcularSinDatos(): void
     {
         $this->ejercicio();
-        $this->post(['proceso' => 'comprobar', 'desde' => '2090-10-01', 'hasta' => '2090-12-31']);
+        $this->post(['proceso' => 'comprobar', 'periodo' => 'T4', 'desde' => '2090-10-01', 'hasta' => '2090-12-31']);
 
         $controller = new Modelo420('Modelo420', '/Modelo420');
         $this->runController($controller);
@@ -108,6 +113,18 @@ final class Modelo420ControllerTest extends TestCase
         $this->assertCount(1, $controller->getFacturasProveedorModelo());
         $this->assertStringContainsString('4770000007', $html);
 
+        // casillas del modelo y plazo de presentación (Decreto 268/2011, art. 57.6)
+        $casillas = $controller->casillas();
+        $this->assertSame(['01', '02', '03'], $casillas['filas'][0]['casillas']);
+        $this->assertEqualsWithDelta(70.0, $casillas['casillas']['25']['importe'], 0.001);
+        $this->assertEqualsWithDelta(42.0, $casillas['casillas']['45']['importe'], 0.001);
+        $this->assertSame('I', $casillas['resultado']);
+        $this->assertSame(['desde' => '2090-04-01', 'hasta' => '2090-04-20'], $controller->plazo());
+        $this->assertSame([], $controller->excluidasVentas());
+        $this->assertSame([], $controller->excluidasCompras());
+        $this->assertStringContainsString(Tools::lang()->trans('casilla-420-45'), $html);
+        $this->assertStringContainsString('20-04-2090', $html);
+
         // marcar como presentado
         $this->post([
             'proceso' => 'marcar-presentado', 'numeroreferencia' => 'ATC-2090-1', 'fechapresentacion' => '2090-04-15',
@@ -136,7 +153,7 @@ final class Modelo420ControllerTest extends TestCase
     public function testGuardarSinTokenNoHaceNada(): void
     {
         $this->makeTrimestre();
-        $this->post(['proceso' => 'guardar', 'desde' => '2090-01-01', 'hasta' => '2090-03-31']);
+        $this->post(['proceso' => 'guardar', 'periodo' => 'T1', 'desde' => '2090-01-01', 'hasta' => '2090-03-31']);
 
         $controller = new Modelo420('Modelo420', '/Modelo420');
         $this->runController($controller);
@@ -148,7 +165,7 @@ final class Modelo420ControllerTest extends TestCase
     public function testGuardarSinEjercicioAbierto(): void
     {
         $this->post([
-            'proceso' => 'guardar', 'desde' => '2190-01-01', 'hasta' => '2190-03-31',
+            'proceso' => 'guardar', 'periodo' => 'T1', 'desde' => '2190-01-01', 'hasta' => '2190-03-31',
             'multireqtoken' => $this->formToken(),
         ]);
 
@@ -162,7 +179,7 @@ final class Modelo420ControllerTest extends TestCase
     {
         $this->ejercicio();
         $this->post([
-            'proceso' => 'guardar', 'desde' => '2090-10-01', 'hasta' => '2090-12-31',
+            'proceso' => 'guardar', 'periodo' => 'T4', 'desde' => '2090-10-01', 'hasta' => '2090-12-31',
             'multireqtoken' => $this->formToken(),
         ]);
 

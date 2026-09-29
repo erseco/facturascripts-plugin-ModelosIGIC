@@ -1,0 +1,169 @@
+{#
+    Casillas de los modelos 420 y 425 calculadas por el plugin.
+
+    Variables:
+    - casillas: resultado de CasillasModelo420::calcular() o CasillasModelo425::calcular()
+    - modelo: '420' o '425'
+    - excluidasVentas / excluidasCompras: líneas que no entran en el cálculo
+    Las fuentes de cada casilla están en doc/NORMATIVA.md.
+#}
+{% set estados = {
+    'calculada': 'bg-success',
+    'parcial': 'bg-warning text-dark',
+    'no-calculada': 'bg-secondary'
+} %}
+
+<div class="alert alert-info">
+    <i class="fa-solid fa-circle-info fa-fw"></i>
+    {{ i18n.trans('casillas-aviso-' ~ modelo) }}
+</div>
+
+<div class="card mb-3">
+    <div class="card-header">
+        <i class="fa-solid fa-calculator fa-fw"></i> {{ i18n.trans('igic-devengado') }}
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>{{ i18n.trans('casillas') }}</th>
+                        <th>{{ i18n.trans('tipo-igic') }}</th>
+                        <th class="text-end">{{ i18n.trans('base-imponible') }}</th>
+                        <th class="text-end">{{ i18n.trans('cuota') }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for fila in casillas.filas %}
+                        <tr>
+                            <td>
+                                {% if fila.casillas %}
+                                    {{ fila.casillas|join(' · ') }}
+                                    {% if fila.programa2026 %}
+                                        <span class="badge bg-warning text-dark" title="{{ i18n.trans('filas-programa-2026') }}">
+                                            {{ i18n.trans('programa-ayuda-2026') }}
+                                        </span>
+                                    {% endif %}
+                                {% else %}
+                                    <span class="badge bg-danger">{{ i18n.trans('sin-casilla') }}</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {{ fila.denominacion }}
+                                {% if fila.vigente is same as(false) %}
+                                    <span class="badge bg-danger" title="{{ i18n.trans('tipo-no-vigente-ayuda') }}">
+                                        {{ i18n.trans('tipo-no-vigente') }}
+                                    </span>
+                                {% endif %}
+                            </td>
+                            <td class="text-end">{{ money(fila.base) }}</td>
+                            <td class="text-end">{{ money(fila.cuota) }}</td>
+                        </tr>
+                    {% else %}
+                        <tr>
+                            <td colspan="4" class="text-muted">{{ i18n.trans('sin-datos') }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+{% if casillas.sinCasilla > 0 %}
+    <div class="alert alert-danger">
+        <i class="fa-solid fa-triangle-exclamation fa-fw"></i> {{ i18n.trans('filas-sin-casilla-' ~ modelo) }}
+    </div>
+{% endif %}
+
+<div class="card mb-3">
+    <div class="card-header">
+        <i class="fa-solid fa-list-ol fa-fw"></i> {{ i18n.trans('casillas-calculadas') }}
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>{{ i18n.trans('casilla') }}</th>
+                        <th>{{ i18n.trans('concepto') }}</th>
+                        <th>{{ i18n.trans('estado') }}</th>
+                        <th class="text-end">{{ i18n.trans('importe') }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for numero, casilla in casillas.casillas %}
+                        <tr>
+                            <td><strong>{{ numero }}</strong></td>
+                            <td>{{ i18n.trans('casilla-' ~ modelo ~ '-' ~ numero) }}</td>
+                            <td>
+                                <span class="badge {{ estados[casilla.estado] }}">
+                                    {{ i18n.trans('casilla-estado-' ~ casilla.estado) }}
+                                </span>
+                            </td>
+                            <td class="text-end">{{ money(casilla.importe) }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+{% if casillas.recargo != 0 %}
+    <div class="alert alert-warning">
+        <i class="fa-solid fa-triangle-exclamation fa-fw"></i>
+        {{ i18n.trans('recargo-no-incluido', {'%importe%': money(casillas.recargo)}) }}
+    </div>
+{% endif %}
+
+{% if excluidasVentas is not empty or excluidasCompras is not empty %}
+    <div class="card mb-3 border-warning">
+        <div class="card-header">
+            <i class="fa-solid fa-filter-circle-xmark fa-fw"></i> {{ i18n.trans('lineas-excluidas') }}
+        </div>
+        <div class="card-body p-0">
+            <p class="small text-muted px-3 pt-2 mb-2">{{ i18n.trans('lineas-excluidas-ayuda') }}</p>
+            <div class="table-responsive">
+                <table class="table table-sm mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>{{ i18n.trans('facturas') }}</th>
+                            <th>{{ i18n.trans('motivo') }}</th>
+                            <th>{{ i18n.trans('codigo') }}</th>
+                            <th class="text-end">{{ i18n.trans('lineas') }}</th>
+                            <th class="text-end">{{ i18n.trans('base-imponible') }}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for grupo in [{'nombre': 'facturas-ventas', 'items': excluidasVentas}, {'nombre': 'facturas-compras', 'items': excluidasCompras}] %}
+                            {% for item in grupo.items %}
+                                <tr>
+                                    <td>{{ i18n.trans(grupo.nombre) }}</td>
+                                    <td>{{ i18n.trans('excluida-' ~ item.motivo) }}</td>
+                                    <td>{{ item.codigo }}</td>
+                                    <td class="text-end">{{ item.lineas }}</td>
+                                    <td class="text-end">{{ money(item.neto) }}</td>
+                                </tr>
+                            {% endfor %}
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+{% endif %}
+
+<div class="card mb-3">
+    <div class="card-header">
+        <i class="fa-solid fa-pen-to-square fa-fw"></i> {{ i18n.trans('casillas-no-calculadas') }}
+    </div>
+    <div class="card-body">
+        <p class="small text-muted">{{ i18n.trans('casillas-no-calculadas-ayuda') }}</p>
+        <ul class="small mb-0">
+            {% for numero, concepto in casillas.noCalculadas %}
+                <li><strong>{{ numero }}</strong>: {{ i18n.trans(concepto) }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+</div>

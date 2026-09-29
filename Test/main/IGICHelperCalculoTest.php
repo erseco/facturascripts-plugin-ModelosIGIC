@@ -155,9 +155,10 @@ final class IGICHelperCalculoTest extends TestCase
     {
         $helper = new IGICHelper();
 
-        foreach ([0, 3, 7, 9.5, 15, 20] as $tipo) {
-            $this->assertNotSame('', $helper->nombreTipoIGIC($tipo));
+        foreach ([0, 1, 3, 5, 7, 9.5, 15, 20] as $tipo) {
+            $this->assertNotSame('', $helper->nombreTipoIGIC($tipo, '2026-06-30'));
         }
-        $this->assertSame('42%', $helper->nombreTipoIGIC(42));
+        $this->assertSame('42 %', $helper->nombreTipoIGIC(42, '2026-06-30'));
+        $this->assertNotSame('', $helper->nombreTipoIGIC(7));
     }
 }

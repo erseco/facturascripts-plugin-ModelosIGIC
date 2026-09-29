@@ -28,6 +28,7 @@ use FacturaScripts\Dinamic\Model\Ejercicio;
 use FacturaScripts\Dinamic\Model\Partida;
 use FacturaScripts\Dinamic\Model\RegularizacionImpuesto;
 use FacturaScripts\Plugins\ModelosIGIC\Lib\ATCFileGenerator;
+use FacturaScripts\Plugins\ModelosIGIC\Lib\CasillasModelo420;
 use FacturaScripts\Plugins\ModelosIGIC\Lib\IGICHelper;
 use FacturaScripts\Plugins\ModelosIGIC\Lib\RegularizacionIGIC;
 use FacturaScripts\Plugins\ModelosIGIC\Model\DeclaracionIGIC;
@@ -35,8 +36,13 @@ use FacturaScripts\Plugins\ModelosIGIC\Model\DeclaracionIGIC;
 /**
  * Controlador para el Modelo 420 - Autoliquidación trimestral del IGIC.
  *
- * Calcula la regularización del IGIC de un período, genera su asiento contable,
+ * Calcula la regularización del IGIC de un trimestre, genera su asiento contable,
  * registra la declaración y permite descargar el fichero para la ATC.
+ *
+ * El periodo de liquidación del 420 es siempre el trimestre natural (Decreto 268/2011,
+ * art. 57.5). Quien liquida por meses está obligado al SII y presenta el modelo 417 o 418
+ * (Decreto 268/2011, arts. 57.5 y 49.5), así que el plugin no admite períodos mensuales ni
+ * rangos de fechas libres.
  *
  * @see https://www3.gobiernodecanarias.org/tributos/atc/w/modelo-420
  */
@@ -69,6 +75,9 @@ class Modelo420 extends Controller
     /** @var IGICHelper */
     protected IGICHelper $helper;
 
+    /** @var ?array */
+    private ?array $casillas = null;
+
     /** @var array */
     private array $desgloseCompras = [];
 
@@ -93,10 +102,7 @@ class Modelo420 extends Controller
         $this->helper = new IGICHelper();
         $this->regiva = new RegularizacionImpuesto();
 
-        $periodoDefault = $this->helper->calcularPeriodoActual();
-        $this->fechaDesde = $this->request()->input('desde') ?: $periodoDefault['fecha_desde'];
-        $this->fechaHasta = $this->request()->input('hasta') ?: $periodoDefault['fecha_hasta'];
-        $this->periodo = $this->request()->input('periodo') ?: $periodoDefault['periodo'];
+        $this->setPeriodo();
 
         // regularización seleccionada
         $id = (int) $this->request()->query('id', 0);
@@ -124,6 +130,68 @@ class Modelo420 extends Controller
             0,
             50
         );
+    }
+
+    /**
+     * Casillas del Modelo 420 de la regularización seleccionada.
+     */
+    public function casillas(): array
+    {
+        if (null === $this->casillas && $this->selectedRegiva !== null) {
+            $this->casillas = (new CasillasModelo420($this->helper))->calcular(
+                $this->desgloseIGICVentas(),
+                $this->desgloseIGICCompras(),
+                $this->selectedRegiva->fechafin
+            );
+        }
+
+        return $this->casillas ?? [];
+    }
+
+    /**
+     * Líneas de compra del período seleccionado que no entran en el cálculo.
+     */
+    public function excluidasCompras(): array
+    {
+        if ($this->selectedRegiva === null) {
+            return [];
+        }
+
+        return $this->helper->excluidasCompras(
+            $this->selectedRegiva->fechainicio,
+            $this->selectedRegiva->fechafin,
+            (int) $this->selectedRegiva->idempresa
+        );
+    }
+
+    /**
+     * Líneas de venta del período seleccionado que no entran en el cálculo.
+     */
+    public function excluidasVentas(): array
+    {
+        if ($this->selectedRegiva === null) {
+            return [];
+        }
+
+        return $this->helper->excluidasVentas(
+            $this->selectedRegiva->fechainicio,
+            $this->selectedRegiva->fechafin,
+            (int) $this->selectedRegiva->idempresa
+        );
+    }
+
+    /**
+     * Plazo de presentación del trimestre seleccionado (Decreto 268/2011, art. 57.6).
+     */
+    public function plazo(): array
+    {
+        $periodo = $this->selectedRegiva->periodo ?? $this->periodo;
+        $fecha = $this->selectedRegiva->fechainicio ?? $this->fechaDesde;
+        if (false === in_array($periodo, IGICHelper::PERIODOS_420, true)) {
+            return [];
+        }
+
+        return $this->helper->plazoPresentacion($periodo, (int) date('Y', strtotime($fecha)));
     }
 
     /**
@@ -367,6 +435,31 @@ class Modelo420 extends Controller
 
         $this->selectedRegiva = $regiva;
         $this->declaracion = RegularizacionIGIC::getDeclaracion($id);
+    }
+
+    /**
+     * Fija el trimestre y sus fechas a partir del período y el año solicitados.
+     *
+     * Las fechas siempre son las del trimestre natural (Decreto 268/2011, art. 57.5).
+     */
+    protected function setPeriodo(): void
+    {
+        $periodoDefault = $this->helper->calcularPeriodoActual();
+        $periodo = (string) $this->request()->input('periodo', '');
+        $this->periodo = in_array($periodo, IGICHelper::PERIODOS_420, true) ? $periodo : $periodoDefault['periodo'];
+
+        $anyo = (int) $this->request()->input('anyo', 0);
+        if ($anyo < 1) {
+            $desde = (string) $this->request()->input('desde', '');
+            $anyo = strtotime($desde) ? (int) date('Y', strtotime($desde)) : 0;
+        }
+        if ($anyo < 1) {
+            $anyo = (int) date('Y', strtotime($periodoDefault['fecha_desde']));
+        }
+
+        $fechas = $this->helper->fechasPorPeriodo($this->periodo, $anyo);
+        $this->fechaDesde = $fechas['fecha_desde'];
+        $this->fechaHasta = $fechas['fecha_hasta'];
     }
 
     /**

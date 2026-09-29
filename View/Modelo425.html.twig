@@ -61,152 +61,13 @@
         {% if fsc.selectedEjercicio %}
             <div class="row">
                 <div class="col-lg-12">
-                    {# IGIC Devengado (ventas) #}
-                    <div class="card mb-4">
-                        <div class="card-header bg-primary text-white">
-                            <i class="fa-solid fa-arrow-up fa-fw"></i> {{ i18n.trans('igic-devengado') }}
-                            <small class="ms-2">({{ i18n.trans('operaciones-ventas') }})</small>
-                        </div>
-                        <div class="card-body p-0">
-                            <div class="table-responsive">
-                                <table class="table table-hover mb-0">
-                                    <thead class="table-light">
-                                        <tr>
-                                            <th class="text-end">{{ i18n.trans('base-imponible') }}</th>
-                                            <th class="text-end">{{ i18n.trans('tipo-igic') }}</th>
-                                            <th class="text-end">{{ i18n.trans('recargo') }}</th>
-                                            <th class="text-end">{{ i18n.trans('cuota-igic') }}</th>
-                                            <th class="text-end">{{ i18n.trans('cuota-recargo') }}</th>
-                                            <th class="text-end">{{ i18n.trans('total') }}</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {% set totalBaseVentas = 0 %}
-                                        {% set totalIGICVentas = 0 %}
-                                        {% set totalRecargoVentas = 0 %}
-                                        {% for item in fsc.desgloseIGICVentas() %}
-                                            {% set totalBaseVentas = totalBaseVentas + item.neto %}
-                                            {% set totalIGICVentas = totalIGICVentas + item.totaliva %}
-                                            {% set totalRecargoVentas = totalRecargoVentas + item.totalrecargo %}
-                                            <tr>
-                                                <td class="text-end">{{ money(item.neto) }}</td>
-                                                <td class="text-end">{{ item.iva }} %</td>
-                                                <td class="text-end">{{ item.recargo }} %</td>
-                                                <td class="text-end">{{ money(item.totaliva) }}</td>
-                                                <td class="text-end">{{ money(item.totalrecargo) }}</td>
-                                                <td class="text-end">{{ money(item.totaliva + item.totalrecargo) }}</td>
-                                            </tr>
-                                        {% else %}
-                                            <tr>
-                                                <td colspan="6" class="text-muted text-center">{{ i18n.trans('sin-datos') }}</td>
-                                            </tr>
-                                        {% endfor %}
-                                    </tbody>
-                                    <tfoot class="table-primary">
-                                        <tr>
-                                            <th class="text-end">{{ money(totalBaseVentas) }}</th>
-                                            <th></th>
-                                            <th></th>
-                                            <th class="text-end">{{ money(totalIGICVentas) }}</th>
-                                            <th class="text-end">{{ money(totalRecargoVentas) }}</th>
-                                            <th class="text-end"><strong>{{ money(fsc.totalDevengado()) }}</strong></th>
-                                        </tr>
-                                    </tfoot>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-
-                    {# IGIC Deducible (compras) #}
-                    <div class="card mb-4">
-                        <div class="card-header bg-success text-white">
-                            <i class="fa-solid fa-arrow-down fa-fw"></i> {{ i18n.trans('igic-deducible') }}
-                            <small class="ms-2">({{ i18n.trans('operaciones-compras') }})</small>
-                        </div>
-                        <div class="card-body p-0">
-                            <div class="table-responsive">
-                                <table class="table table-hover mb-0">
-                                    <thead class="table-light">
-                                        <tr>
-                                            <th class="text-end">{{ i18n.trans('base-imponible') }}</th>
-                                            <th class="text-end">{{ i18n.trans('tipo-igic') }}</th>
-                                            <th class="text-end">{{ i18n.trans('recargo') }}</th>
-                                            <th class="text-end">{{ i18n.trans('cuota-igic') }}</th>
-                                            <th class="text-end">{{ i18n.trans('cuota-recargo') }}</th>
-                                            <th class="text-end">{{ i18n.trans('total') }}</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {% set totalBaseCompras = 0 %}
-                                        {% set totalIGICCompras = 0 %}
-                                        {% set totalRecargoCompras = 0 %}
-                                        {% for item in fsc.desgloseIGICCompras() %}
-                                            {% set totalBaseCompras = totalBaseCompras + item.neto %}
-                                            {% set totalIGICCompras = totalIGICCompras + item.totaliva %}
-                                            {% set totalRecargoCompras = totalRecargoCompras + item.totalrecargo %}
-                                            <tr>
-                                                <td class="text-end">{{ money(item.neto) }}</td>
-                                                <td class="text-end">{{ item.iva }} %</td>
-                                                <td class="text-end">{{ item.recargo }} %</td>
-                                                <td class="text-end">{{ money(item.totaliva) }}</td>
-                                                <td class="text-end">{{ money(item.totalrecargo) }}</td>
-                                                <td class="text-end">{{ money(item.totaliva + item.totalrecargo) }}</td>
-                                            </tr>
-                                        {% else %}
-                                            <tr>
-                                                <td colspan="6" class="text-muted text-center">{{ i18n.trans('sin-datos') }}</td>
-                                            </tr>
-                                        {% endfor %}
-                                    </tbody>
-                                    <tfoot class="table-success">
-                                        <tr>
-                                            <th class="text-end">{{ money(totalBaseCompras) }}</th>
-                                            <th></th>
-                                            <th></th>
-                                            <th class="text-end">{{ money(totalIGICCompras) }}</th>
-                                            <th class="text-end">{{ money(totalRecargoCompras) }}</th>
-                                            <th class="text-end"><strong>{{ money(fsc.totalDeducible()) }}</strong></th>
-                                        </tr>
-                                    </tfoot>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-
-                    {# Resultado anual #}
-                    <div class="card mb-4">
-                        <div class="card-header">
-                            <i class="fa-solid fa-equals fa-fw"></i> {{ i18n.trans('resultado-anual') }}
-                        </div>
-                        <div class="card-body">
-                            <div class="row text-center">
-                                <div class="col-md-4">
-                                    <h5 class="text-muted">{{ i18n.trans('total-devengado') }}</h5>
-                                    <h3 class="text-primary">{{ money(fsc.totalDevengado()) }}</h3>
-                                </div>
-                                <div class="col-md-4">
-                                    <h5 class="text-muted">{{ i18n.trans('total-deducible') }}</h5>
-                                    <h3 class="text-success">{{ money(fsc.totalDeducible()) }}</h3>
-                                </div>
-                                <div class="col-md-4">
-                                    <h5 class="text-muted">{{ i18n.trans('resultado') }}</h5>
-                                    {% set resultado = fsc.resultado() %}
-                                    <h3 class="{% if resultado >= 0 %}text-danger{% else %}text-success{% endif %}">
-                                        {{ money(resultado) }}
-                                    </h3>
-                                    <p class="text-muted mb-0">
-                                        {% if resultado > 0 %}
-                                            {{ i18n.trans('resultado-a-ingresar') }}
-                                        {% elseif resultado < 0 %}
-                                            {{ i18n.trans('resultado-a-favor') }}
-                                        {% else %}
-                                            {{ i18n.trans('resultado-cero') }}
-                                        {% endif %}
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                    {% set casillas = fsc.casillas() %}
+                    {% include 'Block/CasillasIGIC.html.twig' with {
+                        'casillas': casillas,
+                        'modelo': '425',
+                        'excluidasVentas': fsc.excluidasVentas(),
+                        'excluidasCompras': fsc.excluidasCompras()
+                    } %}
 
                     {# Estado del modelo fiscal #}
                     {% if fsc.declaracion %}
@@ -312,7 +173,9 @@
                             </p>
                             <p class="mb-2">
                                 <strong>{{ i18n.trans('plazo-presentacion') }}:</strong>
-                                {{ i18n.trans('plazo-modelo-425') }}
+                                {% set plazo = fsc.plazo() %}
+                                {{ plazo.desde|date('d-m-Y') }} – {{ plazo.hasta|date('d-m-Y') }}
+                                ({{ i18n.trans('plazo-fuente-425') }})
                             </p>
                             <div class="alert alert-info mb-0">
                                 <i class="fa-solid fa-lightbulb fa-fw"></i>

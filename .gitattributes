@@ -50,3 +50,4 @@
 
 # Normative reference documents (PDFs, NORMATIVA.md)
 /doc/                   export-ignore
+/docs/                  export-ignore
