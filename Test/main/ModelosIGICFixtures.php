@@ -59,6 +59,9 @@ trait ModelosIGICFixtures
     /** @var object[] */
     private array $fixtures = [];
 
+    /** @var ?Response Respuesta del último controlador ejecutado con runController() */
+    protected ?Response $ultimaRespuesta = null;
+
     /** Año de pruebas: lejano para no mezclarse con datos reales. */
     protected static string $year = '2090';
 
@@ -147,8 +150,9 @@ trait ModelosIGICFixtures
             $method->setAccessible(true);
             $method->invoke($controller)->disableSend();
             $controller->run();
+            $this->ultimaRespuesta = $method->invoke($controller);
 
-            return $method->invoke($controller)->getContent();
+            return $this->ultimaRespuesta->getContent();
         }
 
         // controladores clásicos (ListController, EditController...): se ejecuta su lógica
@@ -158,6 +162,7 @@ trait ModelosIGICFixtures
         $user = $this->login();
         $response = (new Response())->disableSend();
         $controller->privateCore($response, $user, new ControllerPermissions($user, $className));
+        $this->ultimaRespuesta = $response;
 
         return $response->getContent();
     }

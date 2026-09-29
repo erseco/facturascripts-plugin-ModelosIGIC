@@ -21,372 +21,535 @@
 namespace FacturaScripts\Plugins\ModelosIGIC\Lib;
 
 use DOMDocument;
-use FacturaScripts\Core\DataSrc\Empresas;
-use FacturaScripts\Dinamic\Model\Ejercicio;
-use FacturaScripts\Dinamic\Model\Empresa;
+use DOMElement;
 use FacturaScripts\Plugins\ModelosIGIC\Model\DeclaracionIGIC;
+use RuntimeException;
 
 /**
- * Generador de ficheros para la Agencia Tributaria Canaria (ATC).
+ * Fichero del Modelo 420 para importar en el programa de ayuda de la ATC (EXPERIMENTAL).
  *
- * Soporta dos formatos de fichero:
- * - .atc: Fichero de intercambio para importar/exportar entre programas de ayuda
- * - .dec: Fichero para presentación telemática en la Sede Electrónica
+ * El formato se ha obtenido del propio programa de ayuda oficial, porque la ATC no publica un
+ * diseño de registro (doc/NORMATIVA.md, «Formato del fichero»):
+ * - Contenido: XML con el esquema `Presentacion-420-XMLSchema.xsd` y `Comunes_Presentacion.xsd`
+ *   del programa (nodo raíz DEC), en ISO-8859-1.
+ * - Codificación: `org.grecasa.ext.codificador.Codificador.codifica()`: el XML se comprime con
+ *   `java.util.zip.DeflaterOutputStream` (zlib con cabecera) y se codifica con
+ *   `org.grecasa.ext.codificador.UUEncoder` (líneas de 45 bytes, sin líneas begin/end).
+ * - Nombre y extensión: `GestorDeclaracionesComunImpl` guarda las declaraciones como
+ *   `NIF-milisegundos.atc` y `GestorDeclaracionesImpl.importarDeclaraciones()` solo importa
+ *   ficheros `.atc` del ejercicio del programa.
  *
- * Ambos formatos usan la misma codificación interna:
- * XML (ISO-8859-1) → comprimido con zlib (gzdeflate nivel 9) → codificado en uuencode
+ * El fichero no se presenta directamente en la sede: se importa en el programa de ayuda, que
+ * lo valida y genera la presentación (doc/VALIDAR_FICHERO_ATC.md).
  */
 class ATCFileGenerator
 {
-    public const FORMAT_DEC = 'dec';
-    public const FORMAT_ATC = 'atc';
+    public const EXTENSION = 'atc';
 
-    private const VERSION = '9.2.0';
+    /** Formas de pago del resultado a ingresar admitidas (programa: FormasPago.txt, sin la 3). */
+    public const FORMAS_PAGO = ['1', '2', '4', '5'];
 
-    /** @var Empresa */
-    protected Empresa $empresa;
+    /** Formas de pago que exigen IBAN (programa: PAModuloUtils.isRequeridoCodigoIban()). */
+    public const FORMAS_PAGO_CON_IBAN = ['2', '4'];
+
+    /**
+     * Programas de ayuda oficiales verificados, por ejercicio.
+     *
+     * - version: valor de DEC/@VER que fija ObjectUtils.crearDEC() de cada programa.
+     * - filas: filas de IGIC devengado del programa (nombres_campos.properties: 01–18 en 2025;
+     *   01–18, 16b–18b y 16c–18c en 2026).
+     * - tipos: lista oficial de tipos de gravamen del programa (TiposGravamen.txt).
+     */
+    public const PROGRAMAS = [
+        '2025' => ['version' => '9.2.0', 'filas' => 6, 'tipos' => [0, 3, 5, 7, 9.5, 15, 20]],
+        '2026' => ['version' => '9.3.0', 'filas' => 8, 'tipos' => [0, 1, 3, 5, 7, 9.5, 15, 20]],
+    ];
+
+    /** @var array Casillas calculadas por CasillasModelo420::calcular() */
+    protected array $casillas = [];
+
+    /** @var array Datos que aporta el declarante */
+    protected array $datos = [];
 
     /** @var DeclaracionIGIC */
-    protected DeclaracionIGIC $modelo;
+    protected DeclaracionIGIC $declaracion;
 
-    /** @var array */
-    protected array $desgloseVentas = [];
+    /** @var string Milisegundos para el nombre del fichero */
+    protected string $marcaTiempo;
 
-    /** @var array */
-    protected array $desgloseCompras = [];
-
-    /** @var string Formato de salida: 'dec' o 'atc' */
-    protected string $format = self::FORMAT_DEC;
-
-    public function __construct(DeclaracionIGIC $modelo)
+    public function __construct(DeclaracionIGIC $declaracion)
     {
-        $this->modelo = $modelo;
-        $this->empresa = $this->loadEmpresa();
+        $this->declaracion = $declaracion;
+        $this->marcaTiempo = (string) (int) round(microtime(true) * 1000);
     }
 
     /**
-     * Carga la empresa del ejercicio de la declaración, o la empresa por defecto.
+     * Casillas del modelo calculadas por CasillasModelo420::calcular().
      */
-    protected function loadEmpresa(): Empresa
+    public function setCasillas(array $casillas): self
     {
-        $ejercicio = new Ejercicio();
-        $empresa = new Empresa();
-        if ($ejercicio->load($this->modelo->codejercicio) && $empresa->load($ejercicio->idempresa)) {
-            return $empresa;
-        }
-
-        return Empresas::default();
-    }
-
-    /**
-     * Establece el desglose de ventas (IGIC devengado).
-     */
-    public function setDesgloseVentas(array $desglose): self
-    {
-        $this->desgloseVentas = $desglose;
+        $this->casillas = $casillas;
         return $this;
     }
 
     /**
-     * Establece el desglose de compras (IGIC deducible).
-     */
-    public function setDesgloseCompras(array $desglose): self
-    {
-        $this->desgloseCompras = $desglose;
-        return $this;
-    }
-
-    /**
-     * Establece el formato de salida.
+     * Datos del declarante y de la liquidación que FacturaScripts no registra.
      *
-     * @param string $format Formato: FORMAT_DEC para presentación telemática,
-     *                       FORMAT_ATC para importación/exportación
+     * Claves: nif, nrs, svp, nvp, npk, esc, pis, pue, pop, cmu, cp, tel, c42, c43, c44, c46,
+     * c47, complementaria, nja, tipo (C o D si el resultado es negativo), fpa e iban.
      */
-    public function setFormat(string $format): self
+    public function setDatos(array $datos): self
     {
-        if (!in_array($format, [self::FORMAT_DEC, self::FORMAT_ATC], true)) {
-            throw new \InvalidArgumentException('Formato no válido. Use FORMAT_DEC o FORMAT_ATC');
-        }
-        $this->format = $format;
+        $this->datos = $datos;
         return $this;
     }
 
-    /**
-     * Obtiene el formato de salida actual.
-     */
-    public function getFormat(): string
+    public function getEjercicio(): string
     {
-        return $this->format;
+        return date('Y', strtotime((string) $this->declaracion->fechainicio));
     }
 
     /**
-     * Genera el fichero .dec y lo devuelve como string.
-     */
-    public function generate(): string
-    {
-        $xml = $this->generateXML();
-        $compressed = $this->compressZlib($xml);
-        return $this->encodeUuencode($compressed);
-    }
-
-    /**
-     * Genera el fichero .dec y lo guarda en disco.
-     *
-     * @return string Ruta del fichero generado
-     */
-    public function saveToFile(string $directory = ''): string
-    {
-        if (empty($directory)) {
-            $directory = sys_get_temp_dir();
-        }
-
-        $filename = $this->getFilename();
-        $filepath = rtrim($directory, '/') . '/' . $filename;
-
-        file_put_contents($filepath, $this->generate());
-
-        return $filepath;
-    }
-
-    /**
-     * Genera el nombre del fichero según el formato de la ATC.
-     * Formato: NIF-timestamp.dec o NIF-timestamp.atc
+     * Nombre del fichero con el formato del programa de ayuda: NIF-milisegundos.atc.
      */
     public function getFilename(): string
     {
-        $nif = $this->empresa->cifnif ?? 'UNKNOWN';
-        $timestamp = time() * 1000 + rand(0, 999);
-        return $nif . '-' . $timestamp . '.' . $this->format;
+        $nif = self::texto((string) ($this->datos['nif'] ?? ''), 9);
+        return ($nif ?: 'NIF') . '-' . $this->marcaTiempo . '.' . self::EXTENSION;
     }
 
     /**
-     * Genera el XML del modelo 420.
+     * Resultado de la autoliquidación: 41 + 42 - 43 - 44 (Instrucciones 420, casilla 45;
+     * programa: CalculosModelo420.calcularResultado()).
      */
-    protected function generateXML(): string
+    public function resultado(): float
     {
-        $dom = new DOMDocument('1.0', 'ISO-8859-1');
-        $dom->formatOutput = true;
+        return round(
+            $this->importeCasilla('41') + $this->dato('c42') - $this->dato('c43') - $this->dato('c44'),
+            2
+        );
+    }
 
-        // Elemento raíz
-        $declaracion = $dom->createElement('DECLARACION');
-        $dom->appendChild($declaracion);
-
-        // Cabecera
-        $cabecera = $dom->createElement('CABECERA');
-        $declaracion->appendChild($cabecera);
-        $this->addElement($dom, $cabecera, 'TIPO', 'DEC');
-        $this->addElement($dom, $cabecera, 'MODELO', $this->modelo->tipo);
-        $this->addElement($dom, $cabecera, 'EJERCICIO', substr($this->modelo->codejercicio, 0, 4));
-        $this->addElement($dom, $cabecera, 'PERIODO', $this->getPeriodoATC());
-        $this->addElement($dom, $cabecera, 'VERSION', self::VERSION);
-
-        // Sujeto pasivo
-        $sujeto = $dom->createElement('SUJETO');
-        $declaracion->appendChild($sujeto);
-        $this->addElement($dom, $sujeto, 'NIF', $this->empresa->cifnif);
-        $this->addElement($dom, $sujeto, 'NOMBRE', $this->getNombreEmpresa());
-        $this->addElement($dom, $sujeto, 'APELLIDOS', $this->getApellidosEmpresa());
-        $this->addElement($dom, $sujeto, 'PROVINCIA', $this->getCodigoProvincia());
-        $this->addElement($dom, $sujeto, 'MUNICIPIO', $this->getCodigoMunicipio());
-        $this->addElement($dom, $sujeto, 'CODIGO_POSTAL', $this->empresa->codpostal ?? '');
-        $this->addElement($dom, $sujeto, 'PAIS', 'ES');
-
-        // IGIC Devengado (ventas)
-        $ivaDevengado = $dom->createElement('IVA_DEVENGADO');
-        $declaracion->appendChild($ivaDevengado);
-        $totalDevengado = 0.0;
-
-        foreach ($this->desgloseVentas as $item) {
-            $registro = $dom->createElement('REGISTRO');
-            $ivaDevengado->appendChild($registro);
-            $this->addElement($dom, $registro, 'BASE', $this->formatNumber($item['neto']));
-            $this->addElement($dom, $registro, 'TIPO', $this->formatNumber($item['iva']));
-            $cuota = $item['totaliva'] + ($item['totalrecargo'] ?? 0);
-            $this->addElement($dom, $registro, 'CUOTA', $this->formatNumber($cuota));
-            $totalDevengado += $cuota;
+    /**
+     * Tipo de resultado (DEC/RES/@TIP): I, D, C o S.
+     *
+     * Programa: ValidadorComunImpl.isTipoResultadoValido(). Si el resultado es negativo el
+     * declarante elige compensar (C) o, en el 4T, devolver (D).
+     */
+    public function tipoResultado(): string
+    {
+        if ($this->sinActividad()) {
+            return 'S';
         }
 
-        $this->addElement($dom, $ivaDevengado, 'TOTAL_CUOTA', $this->formatNumber($totalDevengado));
-
-        // IGIC Deducible (compras)
-        $ivaDeducible = $dom->createElement('IVA_DEDUCIBLE');
-        $declaracion->appendChild($ivaDeducible);
-        $totalDeducible = 0.0;
-
-        foreach ($this->desgloseCompras as $item) {
-            $cuota = $item['totaliva'] + ($item['totalrecargo'] ?? 0);
-            $totalDeducible += $cuota;
+        $resultado = $this->resultado();
+        if ($resultado > 0) {
+            return 'I';
         }
 
-        $this->addElement($dom, $ivaDeducible, 'TOTAL', $this->formatNumber($totalDeducible));
-
-        // Resultado
-        $resultado = $dom->createElement('RESULTADO');
-        $declaracion->appendChild($resultado);
-        $cuotaResultante = $totalDevengado - $totalDeducible;
-        $this->addElement($dom, $resultado, 'CUOTA_RESULTANTE', $this->formatNumber($cuotaResultante));
-        // 1 = ingreso normal, 2 = domiciliación, etc.
-        $this->addElement($dom, $resultado, 'FORMA_PAGO', $cuotaResultante > 0 ? '1' : '0');
-        $this->addElement($dom, $resultado, 'IBAN', '');
-
-        return $dom->saveXML();
+        return $resultado < 0 && ($this->datos['tipo'] ?? '') === 'D' ? 'D' : 'C';
     }
 
     /**
-     * Comprime el XML con zlib.
+     * Comprueba los datos antes de generar el fichero.
+     *
+     * @return string[] Claves de traducción de los errores encontrados
      */
-    protected function compressZlib(string $data): string
+    public function validar(): array
     {
-        // Usar compresión raw deflate (sin header gzip/zlib)
-        return gzdeflate($data, 9);
-    }
-
-    /**
-     * Codifica los datos comprimidos en formato uuencode.
-     */
-    protected function encodeUuencode(string $data): string
-    {
-        return convert_uuencode($data);
-    }
-
-    /**
-     * Obtiene el período en formato ATC (1T, 2T, 3T, 4T).
-     */
-    protected function getPeriodoATC(): string
-    {
-        $periodo = $this->modelo->periodo;
-
-        // Si ya está en formato correcto
-        if (preg_match('/^[1-4]T$/', $periodo)) {
-            return $periodo;
+        $errores = [];
+        if ($this->declaracion->tipo !== '420') {
+            return ['fichero-atc-solo-420'];
         }
 
-        // Convertir de T1, T2, T3, T4 a 1T, 2T, 3T, 4T
-        if (preg_match('/^T([1-4])$/', $periodo, $matches)) {
-            return $matches[1] . 'T';
+        $programa = self::PROGRAMAS[$this->getEjercicio()] ?? null;
+        if (null === $programa) {
+            return ['fichero-atc-ejercicio-no-soportado'];
         }
 
-        // Para modelo 425 anual
-        if ($periodo === 'ANUAL' || $this->modelo->tipo === '425') {
-            return '0A';
-        }
-
-        return $periodo;
-    }
-
-    /**
-     * Obtiene el nombre de la empresa (para personas jurídicas) o nombre propio.
-     */
-    protected function getNombreEmpresa(): string
-    {
-        $nombre = $this->empresa->nombre ?? '';
-
-        // Si es persona física, intentar separar nombre y apellidos
-        if ($this->esPersonaFisica()) {
-            $partes = explode(' ', trim($nombre), 2);
-            return $partes[0] ?? $nombre;
-        }
-
-        return $nombre;
-    }
-
-    /**
-     * Obtiene los apellidos (solo para personas físicas).
-     */
-    protected function getApellidosEmpresa(): string
-    {
-        if (!$this->esPersonaFisica()) {
-            return '';
-        }
-
-        $nombre = $this->empresa->nombre ?? '';
-        $partes = explode(' ', trim($nombre), 2);
-        return $partes[1] ?? '';
-    }
-
-    /**
-     * Comprueba si el NIF corresponde a una persona física.
-     */
-    protected function esPersonaFisica(): bool
-    {
-        $nif = $this->empresa->cifnif ?? '';
-        // NIF de persona física empieza por número o X, Y, Z
-        return preg_match('/^[0-9XYZ]/i', $nif) === 1;
-    }
-
-    /**
-     * Obtiene el código de provincia (2 dígitos).
-     */
-    protected function getCodigoProvincia(): string
-    {
-        $provincia = $this->empresa->provincia ?? '';
-
-        // Mapa de provincias canarias
-        $provincias = [
-            'las palmas' => '35',
-            'santa cruz de tenerife' => '38',
-            'tenerife' => '38',
-            'gran canaria' => '35',
+        $obligatorios = [
+            'nif' => '/^[0-9A-Z]{9}$/',
+            'nrs' => '/^[0-9A-ZÑ ,.\-]{1,75}$/u',
+            'nvp' => '/^[0-9A-ZÑ ,.\-]{1,50}$/u',
+            'pop' => '/^[0-9]{2}$/',
+            'cmu' => '/^[0-9]{5}$/',
+            'cp' => '/^[0-9]{5}$/',
         ];
-
-        $provinciaLower = strtolower(trim($provincia));
-        return $provincias[$provinciaLower] ?? '35';
-    }
-
-    /**
-     * Obtiene el código de municipio (5 dígitos: provincia + municipio).
-     */
-    protected function getCodigoMunicipio(): string
-    {
-        $codpostal = $this->empresa->codpostal ?? '';
-        $provincia = $this->getCodigoProvincia();
-
-        // Intentar extraer el código de municipio del código postal
-        if (strlen($codpostal) >= 5) {
-            return substr($codpostal, 0, 5);
+        foreach ($obligatorios as $campo => $patron) {
+            if (1 !== preg_match($patron, $this->valorTexto($campo))) {
+                $errores[] = 'fichero-atc-campo-' . $campo;
+            }
         }
 
-        return $provincia . '000';
-    }
-
-    /**
-     * Formatea un número con 2 decimales.
-     */
-    protected function formatNumber(float $number): string
-    {
-        return number_format($number, 2, '.', '');
-    }
-
-    /**
-     * Añade un elemento al DOM.
-     */
-    protected function addElement(DOMDocument $dom, \DOMElement $parent, string $name, string $value): void
-    {
-        $element = $dom->createElement($name, htmlspecialchars($value, ENT_XML1, 'ISO-8859-1'));
-        $parent->appendChild($element);
-    }
-
-    /**
-     * Decodifica un fichero .dec existente y devuelve el XML.
-     *
-     * @param string $content Contenido del fichero .dec
-     *
-     * @return string XML decodificado
-     */
-    public static function decode(string $content): string
-    {
-        // Decodificar uuencode
-        $decoded = @convert_uudecode($content);
-        if ($decoded === false) {
-            throw new \RuntimeException('Error al decodificar uuencode');
+        $opcionales = [
+            'npk' => '/^[0-9]{1,5}$/',
+            'esc' => '/^[0-9A-ZÑ ,.\-]{1,2}$/u',
+            'pis' => '/^[0-9A-ZÑ ,.\-]{1,2}$/u',
+            'pue' => '/^[0-9A-ZÑ ,.\-]{1,4}$/u',
+            'tel' => '/^[0-9]{1,15}$/',
+        ];
+        foreach ($opcionales as $campo => $patron) {
+            $valor = $this->valorTexto($campo);
+            if ($valor !== '' && 1 !== preg_match($patron, $valor)) {
+                $errores[] = 'fichero-atc-campo-' . $campo;
+            }
         }
 
-        // Descomprimir zlib
-        $xml = @gzinflate($decoded);
-        if ($xml === false) {
-            throw new \RuntimeException('Error al descomprimir zlib');
+        if (false === isset(ListasATC::SIGLAS[$this->valorTexto('svp')])) {
+            $errores[] = 'fichero-atc-campo-svp';
+        }
+
+        if (substr($this->valorTexto('cmu'), 0, 2) !== $this->valorTexto('pop')) {
+            $errores[] = 'fichero-atc-municipio-provincia';
+        }
+
+        $nja = (string) ($this->datos['nja'] ?? '');
+        if (!empty($this->datos['complementaria']) && 1 !== preg_match('/^[0-9]{13}$/', $nja)) {
+            $errores[] = 'fichero-atc-campo-nja';
+        }
+
+        foreach ($this->casillas['filas'] ?? [] as $i => $fila) {
+            if ($i >= $programa['filas']) {
+                $errores[] = 'fichero-atc-demasiados-tipos';
+                break;
+            }
+            if (false === in_array((float) $fila['tipo'], array_map('floatval', $programa['tipos']), true)) {
+                $errores[] = 'fichero-atc-tipo-no-admitido';
+                break;
+            }
+        }
+
+        $tipo = $this->tipoResultado();
+        if ($tipo === 'D' && $this->declaracion->periodo !== 'T4') {
+            $errores[] = 'fichero-atc-devolucion-solo-4t';
+        }
+        if ($tipo === 'I' && false === in_array($this->datos['fpa'] ?? '', self::FORMAS_PAGO, true)) {
+            $errores[] = 'fichero-atc-campo-fpa';
+        }
+        if ($this->requiereIban() && 1 !== preg_match('/^ES[0-9]{22}$/', $this->iban())) {
+            $errores[] = 'fichero-atc-campo-iban';
+        }
+
+        return $errores;
+    }
+
+    /**
+     * Genera el fichero codificado listo para importar en el programa de ayuda.
+     */
+    public function generate(): string
+    {
+        $errores = $this->validar();
+        if (!empty($errores)) {
+            throw new RuntimeException(implode(', ', $errores));
+        }
+
+        return self::codificar($this->generarXML());
+    }
+
+    /**
+     * XML del Modelo 420 según el esquema del programa de ayuda (ISO-8859-1).
+     */
+    public function generarXML(): string
+    {
+        $programa = self::PROGRAMAS[$this->getEjercicio()] ?? ['version' => ''];
+
+        $dom = new DOMDocument('1.0', 'ISO-8859-1');
+        $dec = $dom->createElement('DEC');
+        $dom->appendChild($dec);
+        $dec->setAttribute('MOD', '420');
+        $dec->setAttribute('ANY', $this->getEjercicio());
+        $dec->setAttribute('PER', self::periodo((string) $this->declaracion->periodo));
+        if (!empty($this->datos['complementaria'])) {
+            $dec->setAttribute('COM', 'X');
+            $dec->setAttribute('NJA', (string) $this->datos['nja']);
+        }
+        $dec->setAttribute('VER', $programa['version']);
+
+        // IDE/OTP: sujeto pasivo (ObjectUtilsComun.obtenerDatosIdentificativosDEC())
+        $ide = $this->hijo($dom, $dec, 'IDE');
+        $otp = $this->hijo($dom, $ide, 'OTP');
+        $otp->setAttribute('SEC', '1');
+        $otp->setAttribute('TPE', 'SP');
+        foreach (['nif' => 'NIF', 'nrs' => 'NRS', 'svp' => 'SVP', 'nvp' => 'NVP'] as $campo => $atributo) {
+            $otp->setAttribute($atributo, $this->valorTexto($campo));
+        }
+        $opcionales = ['npk' => 'NPK', 'esc' => 'ESC', 'pis' => 'PIS', 'pue' => 'PUE', 'tel' => 'TEL'];
+        foreach ($opcionales as $campo => $atributo) {
+            if ($this->valorTexto($campo) !== '') {
+                $otp->setAttribute($atributo, $this->valorTexto($campo));
+            }
+        }
+        $otp->setAttribute('POP', $this->valorTexto('pop'));
+        $otp->setAttribute('CMU', $this->valorTexto('cmu'));
+        $otp->setAttribute('CP', $this->valorTexto('cp'));
+        $otp->setAttribute('PAI', 'ES');
+
+        if (false === $this->sinActividad()) {
+            $this->nodosLiquidacion($dom, $dec);
+        }
+
+        // RES: resultado (ObjectUtilsComun.obtenerRESULTADOLIQUIDACION())
+        $tipo = $this->tipoResultado();
+        $res = $this->hijo($dom, $dec, 'RES');
+        $res->setAttribute('TIP', $tipo);
+        if ($tipo !== 'S') {
+            $res->setAttribute('IMP', self::importe(abs($this->resultado())));
+        }
+        if ($tipo === 'I') {
+            $res->setAttribute('FPA', (string) $this->datos['fpa']);
+        }
+        if ($this->requiereIban()) {
+            $res->setAttribute('IBAN', $this->iban());
+        }
+
+        if (false === $this->sinActividad()) {
+            $this->nodoInformacionAdicional($dom, $dec);
+        }
+
+        return (string) $dom->saveXML();
+    }
+
+    /**
+     * Comprime y codifica el XML como Codificador.codifica() del programa de ayuda.
+     */
+    public static function codificar(string $xml): string
+    {
+        return self::uuencode((string) gzcompress($xml));
+    }
+
+    /**
+     * Decodifica un fichero del programa de ayuda (Codificador.decodifica()).
+     */
+    public static function decodificar(string $contenido): string
+    {
+        $xml = @gzuncompress(self::uudecode($contenido));
+        if (false === $xml) {
+            throw new RuntimeException('fichero-atc-no-valido');
         }
 
         return $xml;
+    }
+
+    /**
+     * Importe con dos decimales implícitos (tipos IMPA15Type e IMPA5Type del esquema).
+     *
+     * Equivale a ConversorNumerico.numberToImpType() del programa: redondeo HALF_UP a dos
+     * decimales y se quita el punto; 70,00 € se escribe «7000» y 0 € «000».
+     */
+    public static function importe(float $valor): string
+    {
+        $valor = round($valor, 2);
+        if (abs($valor) < 0.005) {
+            return '000';
+        }
+
+        return str_replace('.', '', sprintf('%.2f', $valor));
+    }
+
+    /**
+     * NIF de persona física: empieza por un dígito o por K, L, M, X, Y o Z.
+     *
+     * Solo sirve para no rellenar el nombre: en personas físicas el programa pide apellidos y
+     * nombre, que el declarante debe escribir; el plugin no los separa.
+     */
+    public static function esPersonaFisica(string $nif): bool
+    {
+        return 1 === preg_match('/^[0-9KLMXYZ]/i', trim($nif));
+    }
+
+    /**
+     * Período del esquema: 1T, 2T, 3T o 4T (atributo DEC/@PER).
+     */
+    public static function periodo(string $periodo): string
+    {
+        return 1 === preg_match('/^T([1-4])$/', $periodo, $match) ? $match[1] . 'T' : $periodo;
+    }
+
+    /**
+     * Texto con los caracteres que admite el programa de ayuda: mayúsculas sin tildes, Ñ,
+     * dígitos, espacio, coma, punto y guion (DatosPersonales y Direccion, enum Campos).
+     */
+    public static function texto(string $valor, int $longitud): string
+    {
+        $valor = mb_strtoupper(trim($valor), 'UTF-8');
+        $valor = strtr($valor, [
+            'Á' => 'A', 'À' => 'A', 'Ä' => 'A', 'Â' => 'A', 'É' => 'E', 'È' => 'E', 'Ë' => 'E', 'Ê' => 'E',
+            'Í' => 'I', 'Ì' => 'I', 'Ï' => 'I', 'Î' => 'I', 'Ó' => 'O', 'Ò' => 'O', 'Ö' => 'O', 'Ô' => 'O',
+            'Ú' => 'U', 'Ù' => 'U', 'Ü' => 'U', 'Û' => 'U', 'Ç' => 'C',
+        ]);
+        $valor = (string) preg_replace('/[^0-9A-ZÑ ,.\-]/u', ' ', $valor);
+        $valor = trim((string) preg_replace('/\s+/', ' ', $valor));
+
+        return mb_substr($valor, 0, $longitud, 'UTF-8');
+    }
+
+    /**
+     * Codificación UU del programa (org.grecasa.ext.codificador.UUEncoder).
+     *
+     * Líneas de 45 bytes que empiezan por «M», la última con su longitud, el valor 0 escrito como
+     * «`» y sin líneas «begin»/«end» ni línea final vacía.
+     */
+    public static function uuencode(string $datos): string
+    {
+        $salida = '';
+        foreach (str_split($datos, 45) as $linea) {
+            $n = strlen($linea);
+            $salida .= chr(($n & 0x3F) + 32);
+            $linea = str_pad($linea, (int) ceil($n / 3) * 3, "\0");
+            for ($i = 0; $i < strlen($linea); $i += 3) {
+                $b0 = ord($linea[$i]);
+                $b1 = ord($linea[$i + 1]);
+                $b2 = ord($linea[$i + 2]);
+                $valores = [$b0 >> 2, (($b0 << 4) & 0x30) | ($b1 >> 4), (($b1 << 2) & 0x3C) | ($b2 >> 6), $b2 & 0x3F];
+                foreach ($valores as $v) {
+                    $salida .= $v === 0 ? '`' : chr($v + 32);
+                }
+            }
+            $salida .= "\n";
+        }
+
+        return $datos === '' ? '' : $salida;
+    }
+
+    /**
+     * Decodificación UU del programa (org.grecasa.ext.codificador.UUDecoder).
+     */
+    public static function uudecode(string $contenido): string
+    {
+        $salida = '';
+        foreach (preg_split('/\r?\n/', $contenido) as $linea) {
+            if ($linea === '') {
+                continue;
+            }
+
+            $n = (ord($linea[0]) - 32) & 0x3F;
+            if ($n <= 0) {
+                break;
+            }
+
+            $linea = str_pad($linea, (intdiv($n + 2, 3) << 2) + 1, ' ');
+            for ($bp = 1; $n > 0; $bp += 4, $n -= 3) {
+                $c = array_map(static fn ($ch) => (ord($ch) - 32) & 0x3F, str_split(substr($linea, $bp, 4)));
+                $bytes = [
+                    ($c[0] << 2 | $c[1] >> 4) & 0xFF,
+                    ($c[1] << 4 | $c[2] >> 2) & 0xFF,
+                    ($c[2] << 6 | $c[3]) & 0xFF,
+                ];
+                foreach (array_slice($bytes, 0, min(3, $n)) as $byte) {
+                    $salida .= chr($byte);
+                }
+            }
+        }
+
+        return $salida;
+    }
+
+    protected function dato(string $clave): float
+    {
+        $valor = $this->datos[$clave] ?? '';
+        return $valor === '' || $valor === null ? 0.0 : round((float) $valor, 2);
+    }
+
+    protected function hijo(DOMDocument $dom, DOMElement $padre, string $nombre): DOMElement
+    {
+        $nodo = $dom->createElement($nombre);
+        $padre->appendChild($nodo);
+        return $nodo;
+    }
+
+    protected function iban(): string
+    {
+        return strtoupper((string) preg_replace('/\s+/', '', (string) ($this->datos['iban'] ?? '')));
+    }
+
+    protected function importeCasilla(string $casilla): float
+    {
+        return (float) ($this->casillas['casillas'][$casilla]['importe'] ?? 0.0);
+    }
+
+    /**
+     * ADI: información adicional, casillas 46 y 47 (T_INFO_ADICIONAL).
+     */
+    protected function nodoInformacionAdicional(DOMDocument $dom, DOMElement $dec): void
+    {
+        if ($this->dato('c46') == 0 && $this->dato('c47') == 0) {
+            return;
+        }
+
+        $adi = $this->hijo($dom, $dec, 'ADI');
+        if ($this->dato('c46') != 0) {
+            $adi->setAttribute('EOA', self::importe($this->dato('c46')));
+        }
+        if ($this->dato('c47') != 0) {
+            $adi->setAttribute('ODD', self::importe($this->dato('c47')));
+        }
+    }
+
+    /**
+     * IGI_DEV, IGI_DED y LIQ (T_DEVENGADO, T_DEDUCIBLE y T_LIQUIDACION del esquema).
+     */
+    protected function nodosLiquidacion(DOMDocument $dom, DOMElement $dec): void
+    {
+        // IGI_DEV/DEV: una fila por tipo (casillas 01–18, 16b–18c); TOT = casilla 25
+        $filas = $this->casillas['filas'] ?? [];
+        if (!empty($filas)) {
+            $dev = $this->hijo($dom, $dec, 'IGI_DEV');
+            foreach ($filas as $fila) {
+                $nodo = $this->hijo($dom, $dev, 'DEV');
+                $nodo->setAttribute('BAS', self::importe((float) $fila['base']));
+                $nodo->setAttribute('TIP', self::importe((float) $fila['tipo']));
+                $nodo->setAttribute('CUO', self::importe((float) $fila['cuota']));
+            }
+            $dev->setAttribute('TOT', self::importe($this->importeCasilla('25')));
+        }
+
+        // IGI_DED/OIC: operaciones interiores con bienes corrientes, casillas 26 y 27; TOT = 40
+        if ($this->importeCasilla('26') != 0 || $this->importeCasilla('27') != 0) {
+            $ded = $this->hijo($dom, $dec, 'IGI_DED');
+            $oic = $this->hijo($dom, $ded, 'OIC');
+            $oic->setAttribute('BAS', self::importe($this->importeCasilla('26')));
+            $oic->setAttribute('CUO', self::importe($this->importeCasilla('27')));
+            $ded->setAttribute('TOT', self::importe($this->importeCasilla('40')));
+        }
+
+        // LIQ: 41 diferencia, 42 regularización art. 22.8.5ª, 43 a compensar, 44 a deducir, 45
+        $liq = $this->hijo($dom, $dec, 'LIQ');
+        $liq->setAttribute('DIF', self::importe($this->importeCasilla('41')));
+        foreach (['c42' => 'RCU', 'c43' => 'CPA', 'c44' => 'DAC'] as $clave => $atributo) {
+            if ($this->dato($clave) != 0) {
+                $liq->setAttribute($atributo, self::importe($this->dato($clave)));
+            }
+        }
+        $liq->setAttribute('RLI', self::importe($this->resultado()));
+    }
+
+    protected function requiereIban(): bool
+    {
+        $tipo = $this->tipoResultado();
+        $fpa = $this->datos['fpa'] ?? '';
+        return $tipo === 'D' || ($tipo === 'I' && in_array($fpa, self::FORMAS_PAGO_CON_IBAN, true));
+    }
+
+    /**
+     * Sin actividad (S): no hay operaciones en el período y el declarante no ha consignado nada.
+     */
+    protected function sinActividad(): bool
+    {
+        return ($this->casillas['resultado'] ?? '') === 'S'
+            && $this->dato('c42') == 0 && $this->dato('c43') == 0 && $this->dato('c44') == 0
+            && $this->dato('c46') == 0 && $this->dato('c47') == 0;
+    }
+
+    /**
+     * Valor de un campo normalizado; la longitud la comprueba validar(), no se recorta.
+     */
+    protected function valorTexto(string $campo): string
+    {
+        $valor = (string) ($this->datos[$campo] ?? '');
+        if (in_array($campo, ['nrs', 'nvp', 'nif', 'svp', 'npk', 'esc', 'pis', 'pue'], true)) {
+            return self::texto($valor, 200);
+        }
+
+        return (string) preg_replace('/\s+/', '', $valor);
     }
 }

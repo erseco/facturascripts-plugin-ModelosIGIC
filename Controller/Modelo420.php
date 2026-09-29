@@ -30,6 +30,7 @@ use FacturaScripts\Dinamic\Model\RegularizacionImpuesto;
 use FacturaScripts\Plugins\ModelosIGIC\Lib\ATCFileGenerator;
 use FacturaScripts\Plugins\ModelosIGIC\Lib\CasillasModelo420;
 use FacturaScripts\Plugins\ModelosIGIC\Lib\IGICHelper;
+use FacturaScripts\Plugins\ModelosIGIC\Lib\ListasATC;
 use FacturaScripts\Plugins\ModelosIGIC\Lib\RegularizacionIGIC;
 use FacturaScripts\Plugins\ModelosIGIC\Model\DeclaracionIGIC;
 
@@ -53,6 +54,9 @@ class Modelo420 extends Controller
 
     /** @var array */
     public array $auxRegiva = [];
+
+    /** @var array Datos del formulario del fichero para el programa de ayuda */
+    public array $datosATC = [];
 
     /** @var ?DeclaracionIGIC */
     public ?DeclaracionIGIC $declaracion = null;
@@ -115,6 +119,50 @@ class Modelo420 extends Controller
         }
 
         $this->view('Modelo420.html.twig');
+    }
+
+    /**
+     * Datos para el formulario del fichero: los enviados, los guardados de la empresa o los que
+     * se pueden tomar de la ficha de la empresa (NIF, código postal y, si no es persona física,
+     * la razón social). El resto los aporta el declarante.
+     */
+    public function datosFichero(): array
+    {
+        if (!empty($this->datosATC)) {
+            return $this->datosATC;
+        }
+
+        $guardados = json_decode((string) Tools::settings('modelosigic', $this->claveDatosFichero(), ''), true);
+        if (is_array($guardados)) {
+            return $guardados;
+        }
+
+        $nif = ATCFileGenerator::texto((string) $this->empresa->cifnif, 9);
+        $nombre = ATCFileGenerator::texto((string) $this->empresa->nombre, 75);
+        return [
+            'nif' => $nif,
+            'nrs' => ATCFileGenerator::esPersonaFisica($nif) ? '' : $nombre,
+            'cp' => (string) $this->empresa->codpostal,
+        ];
+    }
+
+    /**
+     * Indica si se puede generar el fichero para el programa de ayuda de la declaración.
+     */
+    public function ficheroATCDisponible(): bool
+    {
+        return $this->declaracion !== null
+            && isset(ATCFileGenerator::PROGRAMAS[date('Y', strtotime((string) $this->declaracion->fechainicio))]);
+    }
+
+    public function municipiosCanarias(): array
+    {
+        return ListasATC::municipiosCanarias();
+    }
+
+    public function siglasVia(): array
+    {
+        return ListasATC::SIGLAS;
     }
 
     /**
@@ -310,22 +358,27 @@ class Modelo420 extends Controller
     }
 
     /**
-     * Genera el fichero para la ATC y lo prepara como descarga.
+     * Genera el fichero para importar en el programa de ayuda de la ATC (experimental).
+     *
+     * Devuelve false si se ha enviado el fichero; si faltan datos, muestra los errores y vuelve
+     * a la página con el formulario relleno.
      */
-    protected function descargarATC(): void
+    protected function descargarATC(): bool
     {
-        $idempresa = $this->declaracion->getIdEmpresa();
-        $generator = new ATCFileGenerator($this->declaracion);
-        $generator->setDesgloseVentas($this->helper->desgloseIGICVentas(
-            $this->declaracion->fechainicio,
-            $this->declaracion->fechafin,
-            $idempresa
-        ))->setDesgloseCompras($this->helper->desgloseIGICCompras(
-            $this->declaracion->fechainicio,
-            $this->declaracion->fechafin,
-            $idempresa
-        ));
+        $this->datosATC = $this->datosFicheroDesdeRequest();
+        $generator = (new ATCFileGenerator($this->declaracion))
+            ->setCasillas($this->casillas())
+            ->setDatos($this->datosATC);
 
+        $errores = $generator->validar();
+        if (!empty($errores)) {
+            foreach ($errores as $error) {
+                Tools::log()->warning($error);
+            }
+            return true;
+        }
+
+        $this->guardarDatosFichero();
         $content = $generator->generate();
         $this->response()
             ->header('Content-Type', 'application/octet-stream')
@@ -334,6 +387,8 @@ class Modelo420 extends Controller
             ->header('Cache-Control', 'no-cache, must-revalidate')
             ->setContent($content)
             ->send();
+
+        return false;
     }
 
     /**
@@ -358,17 +413,12 @@ class Modelo420 extends Controller
      */
     protected function execAction(string $action): bool
     {
-        if ($this->request()->query('download-atc') === '1' && $this->declaracion) {
-            $this->descargarATC();
-            return false;
-        }
-
         if ($action === 'comprobar') {
             $this->completarRegiva();
             return true;
         }
 
-        $acciones = ['guardar', 'eliminar', 'marcar-presentado', 'crear-rectificativo'];
+        $acciones = ['guardar', 'eliminar', 'marcar-presentado', 'crear-rectificativo', 'descargar-atc'];
         if (false === in_array($action, $acciones, true) || false === $this->validateFormToken()) {
             return true;
         }
@@ -381,9 +431,44 @@ class Modelo420 extends Controller
             $this->marcarPresentado();
         } elseif ($action === 'crear-rectificativo' && $this->declaracion) {
             $this->crearRectificativo();
+        } elseif ($action === 'descargar-atc' && $this->declaracion) {
+            return $this->descargarATC();
         }
 
         return true;
+    }
+
+    protected function claveDatosFichero(): string
+    {
+        return 'fichero-atc-' . (int) $this->empresa->idempresa;
+    }
+
+    /**
+     * Datos del formulario del fichero enviados por el usuario.
+     */
+    protected function datosFicheroDesdeRequest(): array
+    {
+        $datos = [];
+        $campos = ['nif', 'nrs', 'svp', 'nvp', 'npk', 'esc', 'pis', 'pue', 'pop', 'cmu', 'cp', 'tel',
+            'c42', 'c43', 'c44', 'c46', 'c47', 'nja', 'tipo', 'fpa', 'iban'];
+        foreach ($campos as $campo) {
+            $datos[$campo] = trim((string) $this->request()->input($campo, ''));
+        }
+        $datos['complementaria'] = (bool) $this->request()->input('complementaria', false);
+
+        return $datos;
+    }
+
+    /**
+     * Guarda los datos identificativos y de pago de la empresa para el siguiente trimestre.
+     */
+    protected function guardarDatosFichero(): void
+    {
+        $guardar = array_intersect_key($this->datosATC, array_flip(
+            ['nif', 'nrs', 'svp', 'nvp', 'npk', 'esc', 'pis', 'pue', 'pop', 'cmu', 'cp', 'tel', 'fpa', 'iban']
+        ));
+        Tools::settingsSet('modelosigic', $this->claveDatosFichero(), json_encode($guardar));
+        Tools::settingsSave();
     }
 
     /**

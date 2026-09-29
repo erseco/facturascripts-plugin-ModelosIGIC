@@ -45,8 +45,15 @@ ModelosIGIC añade a FacturaScripts el **Modelo 420** (autoliquidación trimestr
    El plugin no deja guardar si hay facturas del período sin asiento contable, si ya existe una
    regularización que se solapa con esas fechas o si faltan las subcuentas especiales de
    Hacienda Pública. En esos casos no se crea nada.
-4. Descarga el fichero **.dec** y preséntalo en la
-   [sede electrónica de la ATC](https://sede.gobiernodecanarias.org/tributos/).
+4. Pulsa **Fichero para el programa de ayuda** (función **experimental**). Completa los datos que
+   FacturaScripts no guarda: apellidos y nombre o razón social, dirección fiscal (sigla y nombre de
+   la vía, códigos de provincia y municipio, código postal), las casillas 42, 43, 44, 46 y 47 si
+   proceden, si un resultado negativo se compensa o se devuelve (solo en el 4T) y la forma de pago
+   con su IBAN. Descarga el fichero `.atc`, impórtalo en el programa de ayuda del Modelo 420 del
+   mismo ejercicio (opción *Importar declaraciones*), revisa el área de errores, completa las
+   casillas que el plugin no calcula y presenta la declaración desde el programa. Solo está
+   disponible para los ejercicios 2025 y 2026, que son los que tienen programa de ayuda
+   verificado. El Modelo 425 no tiene fichero.
 5. Pulsa **Marcar como presentado** e indica el número de referencia de la ATC y la fecha de
    presentación.
 
@@ -78,7 +85,7 @@ con las mismas facturas, que puedes revisar antes de presentar.
 
 En **Informes → Declaraciones IGIC** tienes todas las declaraciones guardadas con su tipo,
 periodo, importes y estado. Desde la ficha de cada una puedes ver las facturas de venta y de
-compra incluidas y descargar de nuevo el fichero para la ATC.
+compra incluidas; el botón del fichero lleva a la pantalla del Modelo 420 de esa declaración.
 
 ---
 

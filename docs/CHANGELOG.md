@@ -18,6 +18,14 @@ la primera versión publicada será la `1.0` (etiqueta `1.0`).
   código y la norma y la lista de puntos pendientes de verificar.
 - Instrucciones oficiales del modelo 425 y manual del programa de ayuda del 420 de 2026 en `doc/`.
 
+- Fichero del Modelo 420 para importar en el programa de ayuda de la ATC (**experimental**), con el formato
+  del programa oficial (v9.3.0 para 2026 y v9.2.0 para 2025): XML según su esquema, importes sin punto decimal,
+  compresión zlib y codificación UU idénticas a las del programa. Formulario para los datos que FacturaScripts no
+  guarda (dirección fiscal, casillas 42–44, 46 y 47, compensar o devolver, forma de pago e IBAN), que se
+  recuerdan por empresa.
+- `doc/VALIDAR_FICHERO_ATC.md`, ficheros de ejemplo en `doc/ejemplos/` y `Test/atc/validar.sh`, que valida e
+  importa ficheros con las clases del programa de ayuda oficial.
+
 ### Changed
 
 - El 4T y el 425 se presentan durante todo enero (1–31), no del 1 al 30 (Decreto 268/2011, art. 57.6).
@@ -25,3 +33,10 @@ la primera versión publicada será la `1.0` (etiqueta `1.0`).
 - Las facturas se imputan al período por su fecha de devengo o, si no la tienen, por su fecha.
 - Solo se calculan las líneas con impuestos de IGIC sin causa de exención.
 - El recargo ya no se suma al IGIC devengado ni al deducible (Decreto Legislativo 1/2025, art. 70.Uno.a).
+- El fichero `.dec` con formato propio se sustituye por el fichero `.atc` del programa de ayuda. El Modelo 425
+  ya no genera fichero.
+
+### Removed
+
+- Los ficheros `.dec` de `Test/fixtures`, generados por el propio plugin, que no demostraban la compatibilidad
+  con la ATC.
