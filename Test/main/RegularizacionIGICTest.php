@@ -20,6 +20,7 @@ use FacturaScripts\Plugins\ModelosIGIC\Lib\IGICHelper;
 use FacturaScripts\Plugins\ModelosIGIC\Lib\RegularizacionIGIC;
 use FacturaScripts\Plugins\ModelosIGIC\Model\DeclaracionIGIC;
 use PHPUnit\Framework\TestCase;
+use RuntimeException;
 
 /**
  * Creación y borrado de regularizaciones del Modelo 420 contra la base de datos.
@@ -196,6 +197,49 @@ final class RegularizacionIGICTest extends TestCase
 
         $this->assertFalse($servicio->eliminar($regiva));
         $this->assertNotNull(RegularizacionIGIC::getDeclaracion((int) $regiva->idregiva), 'El borrado debe deshacerse');
+    }
+
+    public function testExcepcionDeshaceLaTransaccion(): void
+    {
+        $this->makeTrimestre();
+        $servicio = new class () extends RegularizacionIGIC {
+            protected function crearDeclaracion(RegularizacionImpuesto $regiva, int $idempresa): bool
+            {
+                throw new RuntimeException('fallo simulado');
+            }
+        };
+
+        try {
+            $servicio->guardar($this->ejercicio(), '2090-01-01', '2090-03-31', 'T1');
+            $this->fail('Se esperaba una excepción');
+        } catch (RuntimeException $exception) {
+            $this->assertSame('fallo simulado', $exception->getMessage());
+        }
+
+        $this->assertFalse((new DataBase())->inTransaction(), 'La transacción no debe quedar abierta');
+        $this->assertSame(0, $this->contarRegularizaciones());
+    }
+
+    public function testExcepcionAlEliminarDeshaceLaTransaccion(): void
+    {
+        $this->makeTrimestre();
+        $regiva = (new RegularizacionIGIC())->guardar($this->ejercicio(), '2090-01-01', '2090-03-31', 'T1');
+        $servicio = new class () extends RegularizacionIGIC {
+            protected function eliminarTodo(RegularizacionImpuesto $regiva, ?DeclaracionIGIC $declaracion): bool
+            {
+                throw new RuntimeException('fallo simulado');
+            }
+        };
+
+        try {
+            $servicio->eliminar($regiva);
+            $this->fail('Se esperaba una excepción');
+        } catch (RuntimeException $exception) {
+            $this->assertSame('fallo simulado', $exception->getMessage());
+        }
+
+        $this->assertFalse((new DataBase())->inTransaction(), 'La transacción no debe quedar abierta');
+        $this->assertSame(1, $this->contarRegularizaciones());
     }
 
     public function testGetPartidasSinAsiento(): void

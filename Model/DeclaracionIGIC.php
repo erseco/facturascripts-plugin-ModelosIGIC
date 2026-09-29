@@ -27,6 +27,7 @@ use FacturaScripts\Core\Where;
 use FacturaScripts\Dinamic\Model\Ejercicio;
 use FacturaScripts\Dinamic\Model\FacturaCliente;
 use FacturaScripts\Dinamic\Model\FacturaProveedor;
+use Throwable;
 
 /**
  * Modelo para almacenar los modelos fiscales presentados (420 y 425).
@@ -95,6 +96,14 @@ class DeclaracionIGIC extends ModelClass
         $this->totaldeducible = 0.0;
         $this->resultado = 0.0;
         $this->fechacreacion = date('Y-m-d H:i:s');
+    }
+
+    public function install(): string
+    {
+        // dependencias de las claves foráneas
+        new Ejercicio();
+
+        return parent::install();
     }
 
     public static function primaryColumn(): string
@@ -238,7 +247,15 @@ class DeclaracionIGIC extends ModelClass
         $db = self::db();
         $newTransaction = false === $db->inTransaction() && $db->beginTransaction();
 
-        $nuevo = $this->copiarComoRectificativo();
+        try {
+            $nuevo = $this->copiarComoRectificativo();
+        } catch (Throwable $exception) {
+            if ($newTransaction) {
+                $db->rollback();
+            }
+            throw $exception;
+        }
+
         if (null === $nuevo) {
             if ($newTransaction) {
                 $db->rollback();
@@ -264,16 +281,16 @@ class DeclaracionIGIC extends ModelClass
         $db = self::db();
         $newTransaction = false === $db->inTransaction() && $db->beginTransaction();
 
-        foreach ($this->getFacturas() as $factura) {
-            if (false === $factura->delete()) {
-                if ($newTransaction) {
-                    $db->rollback();
-                }
-                return false;
+        try {
+            $borrado = $this->borrarConFacturas();
+        } catch (Throwable $exception) {
+            if ($newTransaction) {
+                $db->rollback();
             }
+            throw $exception;
         }
 
-        if (false === parent::delete()) {
+        if (false === $borrado) {
             if ($newTransaction) {
                 $db->rollback();
             }
@@ -315,6 +332,17 @@ class DeclaracionIGIC extends ModelClass
         }
 
         return true;
+    }
+
+    private function borrarConFacturas(): bool
+    {
+        foreach ($this->getFacturas() as $factura) {
+            if (false === $factura->delete()) {
+                return false;
+            }
+        }
+
+        return parent::delete();
     }
 
     /**

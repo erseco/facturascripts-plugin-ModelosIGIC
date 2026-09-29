@@ -81,6 +81,14 @@ class DeclaracionIGICFactura extends ModelClass
         $this->incluida = true;
     }
 
+    public function install(): string
+    {
+        // dependencias de las claves foráneas
+        new DeclaracionIGIC();
+
+        return parent::install();
+    }
+
     public static function primaryColumn(): string
     {
         return 'id';

@@ -26,10 +26,12 @@ use FacturaScripts\Core\Tools;
 use FacturaScripts\Core\Where;
 use FacturaScripts\Dinamic\Model\Asiento;
 use FacturaScripts\Dinamic\Model\Ejercicio;
+use FacturaScripts\Dinamic\Model\LogMessage;
 use FacturaScripts\Dinamic\Model\Partida;
 use FacturaScripts\Dinamic\Model\RegularizacionImpuesto;
 use FacturaScripts\Plugins\ModelosIGIC\Model\DeclaracionIGIC;
 use FacturaScripts\Plugins\ModelosIGIC\Model\DeclaracionIGICFactura;
+use Throwable;
 
 /**
  * Crea y elimina regularizaciones de IGIC (Modelo 420) con su asiento contable.
@@ -56,6 +58,7 @@ class RegularizacionIGIC
         new RegularizacionImpuesto();
         new DeclaracionIGIC();
         new DeclaracionIGICFactura();
+        new LogMessage();
     }
 
     /**
@@ -112,7 +115,15 @@ class RegularizacionIGIC
         }
 
         $newTransaction = false === $this->db->inTransaction() && $this->db->beginTransaction();
-        $regiva = $this->crearRegularizacion($ejercicio, $desde, $hasta, $periodo, $lineas);
+        try {
+            $regiva = $this->crearRegularizacion($ejercicio, $desde, $hasta, $periodo, $lineas);
+        } catch (Throwable $exception) {
+            if ($newTransaction) {
+                $this->db->rollback();
+            }
+            throw $exception;
+        }
+
         if (null === $regiva) {
             if ($newTransaction) {
                 $this->db->rollback();
@@ -139,7 +150,16 @@ class RegularizacionIGIC
         }
 
         $newTransaction = false === $this->db->inTransaction() && $this->db->beginTransaction();
-        if (false === $this->eliminarTodo($regiva, $declaracion)) {
+        try {
+            $eliminado = $this->eliminarTodo($regiva, $declaracion);
+        } catch (Throwable $exception) {
+            if ($newTransaction) {
+                $this->db->rollback();
+            }
+            throw $exception;
+        }
+
+        if (false === $eliminado) {
             if ($newTransaction) {
                 $this->db->rollback();
             }

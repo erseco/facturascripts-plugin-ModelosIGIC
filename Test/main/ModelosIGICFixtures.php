@@ -32,12 +32,15 @@ use FacturaScripts\Core\Where;
 use FacturaScripts\Dinamic\Lib\MultiRequestProtection;
 use FacturaScripts\Dinamic\Model\Almacen;
 use FacturaScripts\Dinamic\Model\Cliente;
+use FacturaScripts\Dinamic\Model\Divisa;
 use FacturaScripts\Dinamic\Model\Ejercicio;
 use FacturaScripts\Dinamic\Model\FacturaCliente;
 use FacturaScripts\Dinamic\Model\FacturaProveedor;
+use FacturaScripts\Dinamic\Model\FormaPago;
 use FacturaScripts\Dinamic\Model\Impuesto;
 use FacturaScripts\Dinamic\Model\Proveedor;
 use FacturaScripts\Dinamic\Model\RegularizacionImpuesto;
+use FacturaScripts\Dinamic\Model\Serie;
 use FacturaScripts\Dinamic\Model\Subcuenta;
 use FacturaScripts\Dinamic\Model\User;
 use FacturaScripts\Plugins\ModelosIGIC\Lib\RegularizacionIGIC;
@@ -97,7 +100,8 @@ trait ModelosIGICFixtures
 
         if (Subcuenta::count([Where::eq('codejercicio', $ejercicio->codejercicio)]) === 0) {
             $plan = FS_FOLDER . '/Core/Data/Codpais/ESP/defaultPlan.csv';
-            $this->assertTrue((new AccountingPlanImport())->importCSV($plan, $ejercicio->codejercicio));
+            $imported = (new AccountingPlanImport())->importCSV($plan, $ejercicio->codejercicio);
+            $this->assertTrue($imported, 'No se pudo importar el plan contable: ' . $this->recentLog());
         }
 
         return $ejercicio;
@@ -264,6 +268,15 @@ trait ModelosIGICFixtures
         return $impuesto;
     }
 
+    private function primerCodigo(array $modelos, string $campo): ?string
+    {
+        foreach ($modelos as $modelo) {
+            return $modelo->{$campo};
+        }
+
+        return null;
+    }
+
     /**
      * @param FacturaCliente|FacturaProveedor $factura
      */
@@ -271,6 +284,13 @@ trait ModelosIGICFixtures
     {
         $factura->fecha = $fecha;
         $factura->codalmacen = $this->codalmacen();
+
+        // las instalaciones mínimas de CI no tienen serie, forma de pago ni divisa por defecto
+        $series = Serie::all([], ['codserie' => 'ASC'], 0, 1);
+        $factura->codserie = $factura->codserie ?: $this->primerCodigo($series, 'codserie');
+        $factura->codpago = $factura->codpago ?: $this->primerCodigo(FormaPago::all([], [], 0, 1), 'codpago');
+        $divisas = Divisa::all([Where::eq('coddivisa', 'EUR')]);
+        $factura->coddivisa = $factura->coddivisa ?: $this->primerCodigo($divisas, 'coddivisa');
         $this->assertTrue($factura->save(), $this->recentLog());
 
         $impuesto = $this->impuesto($tipo);
