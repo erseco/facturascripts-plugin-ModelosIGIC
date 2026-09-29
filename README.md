@@ -97,6 +97,12 @@ comprueba los importes con el programa de ayuda de la ATC o con tu asesor.
 - `make test` — ejecuta los tests
 - `make package VERSION=1.0` — genera el ZIP de distribución
 
+## Errores y sugerencias
+
+Si encuentras un error, un importe que no cuadra con el programa de ayuda de la ATC o un cambio
+normativo que falte, abre una [issue](https://github.com/erseco/facturascripts-plugin-ModelosIGIC/issues).
+Las contribuciones mediante pull request también son bienvenidas.
+
 ## Créditos
 
 - **Carlos García Gómez** (NeoRazorX) y **Francesc Pineda** — plugin original
