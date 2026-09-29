@@ -12,6 +12,10 @@ del IGIC) de la **Agencia Tributaria Canaria (ATC)** para FacturaScripts. Calcul
 devengado y deducible a partir de las facturas, genera el asiento de regularización y el fichero
 para la presentación telemática.
 
+<p align="center">
+  <img src=".github/screenshot.png" alt="Regularización del Modelo 420 con el desglose del IGIC y el asiento generado" width="700">
+</p>
+
 ## Origen
 
 Este plugin es un **fork y evolución** de
@@ -40,8 +44,10 @@ licencia AGPL-3.0 y los créditos de los autores originales.
 ### Modelo 420
 
 1. Ve a **Informes > Modelo 420**.
-2. Elige el ejercicio y el trimestre y pulsa **Calcular** para ver la previsualización.
-3. Pulsa **Guardar** para crear la regularización y el asiento contable.
+2. Pulsa **Nueva regularización**, elige el trimestre (o ajusta las fechas) y pulsa
+   **Calcular** para ver la previsualización del asiento.
+3. Pulsa **Guardar** para crear la regularización, el asiento contable y la declaración en
+   borrador. Todo se guarda en una sola transacción: si algo falla no queda nada a medias.
 4. Descarga el fichero `.dec` y preséntalo en la
    [sede electrónica de la ATC](https://sede.gobiernodecanarias.org/tributos/).
 5. Marca la declaración como **presentada** indicando el número de referencia de la ATC.

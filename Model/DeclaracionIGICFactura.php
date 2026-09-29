@@ -20,8 +20,8 @@
 
 namespace FacturaScripts\Plugins\ModelosIGIC\Model;
 
-use FacturaScripts\Core\Model\Base\ModelClass;
-use FacturaScripts\Core\Model\Base\ModelTrait;
+use FacturaScripts\Core\Template\ModelClass;
+use FacturaScripts\Core\Template\ModelTrait;
 use FacturaScripts\Core\Tools;
 use FacturaScripts\Dinamic\Model\FacturaCliente;
 use FacturaScripts\Dinamic\Model\FacturaProveedor;
@@ -81,6 +81,14 @@ class DeclaracionIGICFactura extends ModelClass
         $this->incluida = true;
     }
 
+    public function install(): string
+    {
+        // dependencias de las claves foráneas
+        new DeclaracionIGIC();
+
+        return parent::install();
+    }
+
     public static function primaryColumn(): string
     {
         return 'id';
@@ -98,17 +106,13 @@ class DeclaracionIGICFactura extends ModelClass
      */
     public function getFactura()
     {
-        if ($this->tipofactura === 'cliente') {
-            $factura = new FacturaCliente();
-            return $factura->get($this->idfactura);
-        }
+        $factura = match ($this->tipofactura) {
+            'cliente' => new FacturaCliente(),
+            'proveedor' => new FacturaProveedor(),
+            default => null,
+        };
 
-        if ($this->tipofactura === 'proveedor') {
-            $factura = new FacturaProveedor();
-            return $factura->get($this->idfactura);
-        }
-
-        return null;
+        return $factura !== null && $factura->load($this->idfactura) ? $factura : null;
     }
 
     /**
@@ -117,7 +121,7 @@ class DeclaracionIGICFactura extends ModelClass
     public function getModelo(): ?DeclaracionIGIC
     {
         $modelo = new DeclaracionIGIC();
-        return $modelo->get($this->idmodelo);
+        return $modelo->load($this->idmodelo) ? $modelo : null;
     }
 
     /**

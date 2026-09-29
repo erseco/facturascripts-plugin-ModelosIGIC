@@ -38,6 +38,9 @@ $loader->addPsr4('FacturaScripts\\Plugins\\ModelosIGIC\\', FS_FOLDER . '/Plugins
 
 $loader->addPsr4('FacturaScripts\\Dinamic\\', FS_FOLDER . '/Dinamic');
 
+// Register shared test fixtures (traits) copied next to the tests
+$loader->addPsr4('FacturaScripts\\Test\\Plugins\\', FS_FOLDER . '/Test/Plugins');
+
 // Deploy real table definitions before instantiating plugin models.
 FacturaScripts\Core\Kernel::init();
 if (!in_array('ModelosIGIC', FacturaScripts\Core\Plugins::enabled(), true)) {

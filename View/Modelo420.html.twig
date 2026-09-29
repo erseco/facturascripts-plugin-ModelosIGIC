@@ -29,10 +29,14 @@
                         </a>
                     {% endif %}
                     {% if fsc.allowDelete %}
-                        <a href="{{ fsc.url() }}?delete={{ fsc.selectedRegiva.idregiva }}" class="btn btn-danger"
-                           onclick="return confirm('{{ i18n.trans('confirmar-eliminar') }}');">
-                            <i class="fa-solid fa-trash fa-fw"></i> {{ i18n.trans('eliminar') }}
-                        </a>
+                        <form action="{{ fsc.url() }}?id={{ fsc.selectedRegiva.idregiva }}" method="post" class="d-inline"
+                              onsubmit="return confirm('{{ i18n.trans('confirmar-eliminar') }}');">
+                            {{ formToken() }}
+                            <input type="hidden" name="proceso" value="eliminar">
+                            <button type="submit" class="btn btn-danger">
+                                <i class="fa-solid fa-trash fa-fw"></i> {{ i18n.trans('eliminar') }}
+                            </button>
+                        </form>
                     {% endif %}
                 {% endif %}
             </div>
@@ -195,7 +199,7 @@
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {% for partida in fsc.selectedRegiva.getPartidas() %}
+                                        {% for partida in fsc.getPartidas() %}
                                             <tr>
                                                 <td>
                                                     <a href="{{ partida.url() }}" target="_blank">{{ partida.codsubcuenta }}</a>
@@ -412,9 +416,9 @@
                             </thead>
                             <tbody>
                                 {% for reg in fsc.allRegularizaciones() %}
-                                    <tr class="clickableRow" data-href="{{ reg.url() }}">
+                                    <tr class="clickableRow" data-href="{{ fsc.url() }}?id={{ reg.idregiva }}">
                                         <td>{{ reg.codejercicio }}</td>
-                                        <td><a href="{{ reg.url() }}">{{ reg.periodo }}</a></td>
+                                        <td><a href="{{ fsc.url() }}?id={{ reg.idregiva }}">{{ reg.periodo }}</a></td>
                                         <td>{{ reg.fechainicio }}</td>
                                         <td>{{ reg.fechafin }}</td>
                                         <td class="text-end">{{ reg.fechaasiento }}</td>
@@ -440,6 +444,7 @@
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
                 <form name="formNuevaRegiva" action="{{ fsc.url() }}" method="post">
+                    {{ formToken() }}
                     <input type="hidden" name="proceso" value="">
                     <div class="modal-header">
                         <h5 class="modal-title" id="modalNuevaRegivaLabel">
@@ -525,7 +530,7 @@
     <script>
         function cambiarFechas() {
             const periodo = document.getElementById('periodo').value;
-            const anyo = new Date().getFullYear();
+            const anyo = (document.getElementById('desde').value || '').substring(0, 4) || new Date().getFullYear();
             let desde, hasta;
 
             switch (periodo) {
@@ -561,6 +566,13 @@
             document.forms['formNuevaRegiva'].submit();
         }
 
+        // Reabrir el modal con la previsualización calculada
+        {% if fsc.auxRegiva is not empty %}
+        document.addEventListener('DOMContentLoaded', function () {
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('modalNuevaRegiva')).show();
+        });
+        {% endif %}
+
         // Hacer filas clickables
         document.querySelectorAll('.clickableRow').forEach(row => {
             row.style.cursor = 'pointer';
@@ -576,6 +588,7 @@
             <div class="modal-dialog">
                 <div class="modal-content">
                     <form action="{{ fsc.url() }}?id={{ fsc.selectedRegiva.idregiva }}" method="post">
+                        {{ formToken() }}
                         <input type="hidden" name="proceso" value="marcar-presentado">
                         <input type="hidden" name="idmodelo" value="{{ fsc.declaracion.idmodelo }}">
                         <div class="modal-header">
@@ -612,6 +625,7 @@
             <div class="modal-dialog">
                 <div class="modal-content">
                     <form action="{{ fsc.url() }}?id={{ fsc.selectedRegiva.idregiva }}" method="post">
+                        {{ formToken() }}
                         <input type="hidden" name="proceso" value="crear-rectificativo">
                         <input type="hidden" name="idmodelo" value="{{ fsc.declaracion.idmodelo }}">
                         <div class="modal-header">

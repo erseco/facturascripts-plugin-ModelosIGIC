@@ -17,6 +17,7 @@
             <div class="col-sm-6 text-end">
                 {% if fsc.selectedEjercicio and fsc.declaracion is null %}
                     <form action="{{ fsc.url() }}" method="post" class="d-inline">
+                        {{ formToken() }}
                         <input type="hidden" name="proceso" value="guardar">
                         <input type="hidden" name="codejercicio" value="{{ fsc.selectedEjercicio.codejercicio }}">
                         <button type="submit" class="btn btn-success">
@@ -462,6 +463,7 @@
             <div class="modal-dialog">
                 <div class="modal-content">
                     <form action="{{ fsc.url() }}" method="post">
+                        {{ formToken() }}
                         <input type="hidden" name="proceso" value="marcar-presentado">
                         <input type="hidden" name="codejercicio" value="{{ fsc.selectedEjercicio.codejercicio }}">
                         <input type="hidden" name="idmodelo" value="{{ fsc.declaracion.idmodelo }}">

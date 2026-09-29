@@ -1,12 +1,13 @@
 coverage:
   status:
-    # Informational until the functional test suite lands (target: 90 %).
     project:
       default:
-        informational: true
+        target: 90%
+        threshold: 0%
     patch:
       default:
-        informational: true
+        target: 90%
+        threshold: 0%
 
 fixes:
   - "Plugins/ModelosIGIC/::"
