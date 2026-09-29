@@ -223,6 +223,54 @@ final class Modelo420ControllerTest extends TestCase
         $this->assertSame(1, $this->contarRegularizaciones());
     }
 
+    public function testListadoMuestraResultadoYEstado(): void
+    {
+        $this->makeTrimestre();
+        (new RegularizacionIGIC())->guardar($this->ejercicio(), '2090-01-01', '2090-03-31', 'T1');
+
+        $controller = new Modelo420('Modelo420', '/Modelo420');
+        $html = $this->runController($controller);
+
+        $this->assertStringContainsString(Tools::money(42.0), $html);
+        $this->assertStringContainsString(Tools::lang()->trans('resultado-tipo-I'), $html);
+        $this->assertSame('C', $controller->tipoResultado(-5.0));
+    }
+
+    public function testActualizarRecalculaConLasFacturasNuevas(): void
+    {
+        $this->makeTrimestre();
+        $regiva = (new RegularizacionIGIC())->guardar($this->ejercicio(), '2090-01-01', '2090-03-31', 'T1');
+        $this->makeFacturaCliente('10-03-' . static::$year, 1000.0);
+
+        $this->post(['proceso' => 'actualizar', 'multireqtoken' => $this->formToken()], ['id' => $regiva->idregiva]);
+        $controller = new Modelo420('Modelo420', '/Modelo420');
+        $this->runController($controller);
+
+        $this->assertNotNull($controller->declaracion, $this->recentLog());
+        $this->assertEqualsWithDelta(112.0, $controller->declaracion->resultado, 0.001);
+        // el ejercicio de pruebas es futuro: el trimestre no ha terminado
+        $this->assertTrue($controller->periodoAbierto());
+        $this->assertSame(1, $this->contarRegularizaciones());
+    }
+
+    public function testActualizarSinPermiso(): void
+    {
+        $this->makeTrimestre();
+        $regiva = (new RegularizacionIGIC())->guardar($this->ejercicio(), '2090-01-01', '2090-03-31', 'T1');
+
+        $this->post(['proceso' => 'actualizar', 'multireqtoken' => $this->formToken()], ['id' => $regiva->idregiva]);
+        $controller = new class ('Modelo420', '/Modelo420') extends Modelo420 {
+            protected function execAction(string $action): bool
+            {
+                $this->allowUpdate = false;
+                return parent::execAction($action);
+            }
+        };
+        $this->runController($controller);
+
+        $this->assertSame((int) $regiva->idregiva, (int) $controller->selectedRegiva->idregiva);
+    }
+
     public function testRegularizacionInexistente(): void
     {
         $this->get(['id' => 999999]);

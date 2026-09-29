@@ -199,6 +199,51 @@ final class RegularizacionIGICTest extends TestCase
         $this->assertNotNull(RegularizacionIGIC::getDeclaracion((int) $regiva->idregiva), 'El borrado debe deshacerse');
     }
 
+    public function testActualizarIncluyeLasFacturasNuevas(): void
+    {
+        $this->makeTrimestre();
+        $servicio = new RegularizacionIGIC();
+        $regiva = $servicio->guardar($this->ejercicio(), '2090-01-01', '2090-03-31', 'T1');
+        $idasiento = $regiva->idasiento;
+        $this->makeFacturaCliente('10-03-' . static::$year, 1000.0);
+
+        $nueva = $servicio->actualizar($regiva, $this->ejercicio());
+        $this->assertNotNull($nueva, $this->recentLog());
+        $this->assertSame('T1', $nueva->periodo);
+        $this->assertFalse((new Asiento())->load($idasiento), 'El asiento anterior debe eliminarse');
+        $declaracion = RegularizacionIGIC::getDeclaracion((int) $nueva->idregiva);
+        $this->assertEqualsWithDelta(112.0, $declaracion->resultado, 0.001);
+        $this->assertSame(1, $this->contarRegularizaciones());
+    }
+
+    public function testActualizarDeclaracionPresentadaNoSePermite(): void
+    {
+        $this->makeTrimestre();
+        $servicio = new RegularizacionIGIC();
+        $regiva = $servicio->guardar($this->ejercicio(), '2090-01-01', '2090-03-31', 'T1');
+        RegularizacionIGIC::getDeclaracion((int) $regiva->idregiva)->marcarPresentado('REF-1', '2090-04-15');
+
+        $this->assertNull($servicio->actualizar($regiva, $this->ejercicio()));
+        $this->assertSame('presentado', RegularizacionIGIC::getDeclaracion((int) $regiva->idregiva)->estado);
+    }
+
+    public function testActualizarSinDatosConservaLaAnterior(): void
+    {
+        $this->makeTrimestre();
+        $regiva = (new RegularizacionIGIC())->guardar($this->ejercicio(), '2090-01-01', '2090-03-31', 'T1');
+
+        // el recálculo ya no encuentra datos: se deshace el borrado
+        $helper = new class () extends IGICHelper {
+            public function calcularRegularizacion(string $fechaInicio, string $fechaFin, string $codEjercicio): array
+            {
+                return [];
+            }
+        };
+        $this->assertNull((new RegularizacionIGIC($helper))->actualizar($regiva, $this->ejercicio()));
+        $this->assertNotNull(RegularizacionIGIC::getDeclaracion((int) $regiva->idregiva));
+        $this->assertTrue((new Asiento())->load($regiva->idasiento));
+    }
+
     public function testExcepcionDeshaceLaTransaccion(): void
     {
         $this->makeTrimestre();

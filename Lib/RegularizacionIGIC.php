@@ -175,6 +175,35 @@ class RegularizacionIGIC
     }
 
     /**
+     * Vuelve a calcular una regularización en borrador con las facturas actuales del período.
+     *
+     * Elimina la regularización y la crea de nuevo en una sola transacción: si no se puede
+     * crear, se conserva la anterior. Devuelve la nueva regularización o null.
+     */
+    public function actualizar(RegularizacionImpuesto $regiva, Ejercicio $ejercicio): ?RegularizacionImpuesto
+    {
+        $desde = $regiva->fechainicio;
+        $hasta = $regiva->fechafin;
+        $periodo = $regiva->periodo;
+
+        $newTransaction = false === $this->db->inTransaction() && $this->db->beginTransaction();
+        try {
+            $nueva = $this->eliminar($regiva) ? $this->guardar($ejercicio, $desde, $hasta, $periodo) : null;
+        } catch (Throwable $exception) {
+            if ($newTransaction) {
+                $this->db->rollback();
+            }
+            throw $exception;
+        }
+
+        if ($newTransaction) {
+            null === $nueva ? $this->db->rollback() : $this->db->commit();
+        }
+
+        return $nueva;
+    }
+
+    /**
      * Comprueba que las partidas propuestas cuadran.
      *
      * Solo descuadran cuando falta la subcuenta especial de cierre (IVAACR o IVADEU).

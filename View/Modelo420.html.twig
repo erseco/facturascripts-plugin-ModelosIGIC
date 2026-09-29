@@ -29,7 +29,18 @@
                             <span class="badge bg-warning text-dark">{{ i18n.trans('experimental') }}</span>
                         </button>
                     {% endif %}
-                    {% if fsc.allowDelete %}
+                    {% set borrador = fsc.declaracion is null or fsc.declaracion.estado == 'borrador' %}
+                    {% if fsc.allowUpdate and borrador %}
+                        <form action="{{ fsc.url() }}?id={{ fsc.selectedRegiva.idregiva }}" method="post" class="d-inline"
+                              onsubmit="return confirm('{{ i18n.trans('confirmar-actualizar') }}');">
+                            {{ formToken() }}
+                            <input type="hidden" name="proceso" value="actualizar">
+                            <button type="submit" class="btn btn-warning">
+                                <i class="fa-solid fa-rotate fa-fw"></i> {{ i18n.trans('actualizar-datos') }}
+                            </button>
+                        </form>
+                    {% endif %}
+                    {% if fsc.allowDelete and borrador %}
                         <form action="{{ fsc.url() }}?id={{ fsc.selectedRegiva.idregiva }}" method="post" class="d-inline"
                               onsubmit="return confirm('{{ i18n.trans('confirmar-eliminar') }}');">
                             {{ formToken() }}
@@ -50,6 +61,11 @@
     <div class="container-fluid">
         {% if fsc.selectedRegiva %}
             {# Vista de detalle de una regularización existente #}
+            {% if fsc.periodoAbierto() and (fsc.declaracion is null or fsc.declaracion.estado == 'borrador') %}
+                <div class="alert alert-warning">
+                    <i class="fa-solid fa-triangle-exclamation fa-fw"></i> {{ i18n.trans('periodo-no-terminado') }}
+                </div>
+            {% endif %}
             <div class="row">
                 <div class="col-lg-8">
                     {# Información de la regularización #}
@@ -342,21 +358,37 @@
                                     <th>{{ i18n.trans('periodo') }}</th>
                                     <th>{{ i18n.trans('desde') }}</th>
                                     <th>{{ i18n.trans('hasta') }}</th>
+                                    <th class="text-end">{{ i18n.trans('resultado') }}</th>
+                                    <th>{{ i18n.trans('estado') }}</th>
                                     <th class="text-end">{{ i18n.trans('fecha-asiento') }}</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {% for reg in fsc.allRegularizaciones() %}
+                                    {% set decl = fsc.declaracionDe(reg.idregiva) %}
                                     <tr class="clickableRow" data-href="{{ fsc.url() }}?id={{ reg.idregiva }}">
                                         <td>{{ reg.codejercicio }}</td>
                                         <td><a href="{{ fsc.url() }}?id={{ reg.idregiva }}">{{ reg.periodo }}</a></td>
                                         <td>{{ reg.fechainicio }}</td>
                                         <td>{{ reg.fechafin }}</td>
+                                        <td class="text-end">
+                                            {% if decl %}
+                                                <span class="{% if decl.resultado > 0 %}text-danger{% else %}text-success{% endif %}">
+                                                    {{ money(decl.resultado) }}
+                                                </span>
+                                                <br><small class="text-muted">{{ i18n.trans('resultado-tipo-' ~ fsc.tipoResultado(decl.resultado)) }}</small>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if decl %}
+                                                <span class="badge bg-{{ decl.estadoClase() }}">{{ decl.estadoDescripcion() }}</span>
+                                            {% endif %}
+                                        </td>
                                         <td class="text-end">{{ reg.fechaasiento }}</td>
                                     </tr>
                                 {% else %}
                                     <tr>
-                                        <td colspan="5" class="text-muted text-center p-4">
+                                        <td colspan="7" class="text-muted text-center p-4">
                                             <i class="fa-solid fa-info-circle fa-2x mb-2"></i><br>
                                             {{ i18n.trans('sin-regularizaciones') }}
                                         </td>
