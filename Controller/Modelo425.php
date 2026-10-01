@@ -26,6 +26,7 @@ use FacturaScripts\Core\Tools;
 use FacturaScripts\Core\Where;
 use FacturaScripts\Dinamic\Model\Ejercicio;
 use FacturaScripts\Plugins\ModelosIGIC\Lib\CasillasModelo425;
+use FacturaScripts\Plugins\ModelosIGIC\Lib\ComparativaIGIC;
 use FacturaScripts\Plugins\ModelosIGIC\Lib\IGICHelper;
 use FacturaScripts\Plugins\ModelosIGIC\Model\DeclaracionIGIC;
 use FacturaScripts\Plugins\ModelosIGIC\Model\DeclaracionIGICFactura;
@@ -101,6 +102,20 @@ class Modelo425 extends Controller
     /**
      * Ejecuta la acción solicitada.
      */
+    /**
+     * Returns the normalized year range requested for the comparison.
+     */
+    protected function rangoComparativa(): array
+    {
+        $actual = $this->selectedEjercicio
+            ? (int) date('Y', strtotime((string) $this->selectedEjercicio->fechainicio))
+            : (int) date('Y');
+        $desde = (int) $this->request()->inputOrQuery('comparar_desde', $actual - 4);
+        $hasta = (int) $this->request()->inputOrQuery('comparar_hasta', $actual);
+
+        return $desde <= $hasta ? [$desde, $hasta] : [$hasta, $desde];
+    }
+
     protected function execAction(string $action): void
     {
         $acciones = ['guardar', 'marcar-presentado'];
@@ -146,6 +161,30 @@ class Modelo425 extends Controller
             0,
             50
         );
+    }
+
+    /**
+     * Returns the historical Model 425 comparison for the current company.
+     */
+    public function comparativaHistorica(): array
+    {
+        [$desde, $hasta] = $this->rangoComparativa();
+        $declaraciones = array_filter(
+            DeclaracionIGIC::all([Where::eq('tipo', '425')], ['fechainicio' => 'ASC']),
+            fn (DeclaracionIGIC $declaracion): bool => $declaracion->getIdEmpresa() === (int) $this->empresa->idempresa
+        );
+
+        return ComparativaIGIC::modelo425($declaraciones, $desde, $hasta);
+    }
+
+    public function comparativaDesde(): int
+    {
+        return $this->rangoComparativa()[0];
+    }
+
+    public function comparativaHasta(): int
+    {
+        return $this->rangoComparativa()[1];
     }
 
     /**
