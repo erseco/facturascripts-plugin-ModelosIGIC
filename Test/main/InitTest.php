@@ -12,7 +12,9 @@
 
 namespace FacturaScripts\Test\Plugins\ModelosIGIC;
 
+use FacturaScripts\Core\DataSrc\Empresas;
 use FacturaScripts\Core\Template\InitClass;
+use FacturaScripts\Core\Tools;
 use FacturaScripts\Plugins\ModelosIGIC\Init;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
@@ -200,5 +202,21 @@ class InitTest extends TestCase
         $init->uninstall();
 
         $this->assertInstanceOf(Init::class, $init);
+    }
+
+    public function testUpdateBorraElIbanGuardadoPorVersionesAnteriores(): void
+    {
+        $clave = 'fichero-atc-' . Empresas::default()->idempresa;
+        $datos = ['nif' => 'B00000000', 'iban' => 'ES9121000418450200051332'];
+        Tools::settingsSet('modelosigic', $clave, json_encode($datos));
+        Tools::settingsSave();
+
+        (new Init())->update();
+
+        $guardados = json_decode((string) Tools::settings('modelosigic', $clave, ''), true);
+        $this->assertSame(['nif' => 'B00000000'], $guardados);
+
+        Tools::settingsSet('modelosigic', $clave, '');
+        Tools::settingsSave();
     }
 }

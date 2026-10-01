@@ -25,6 +25,7 @@ use FacturaScripts\Core\Template\ModelTrait;
 use FacturaScripts\Core\Tools;
 use FacturaScripts\Dinamic\Model\FacturaCliente;
 use FacturaScripts\Dinamic\Model\FacturaProveedor;
+use FacturaScripts\Plugins\ModelosIGIC\Lib\IGICHelper;
 
 /**
  * Modelo para almacenar las facturas incluidas en cada modelo fiscal.
@@ -142,10 +143,13 @@ class DeclaracionIGICFactura extends ModelClass
     }
 
     /**
-     * Crea un registro desde una factura de cliente.
+     * Crea un registro desde una factura de cliente con la parte de IGIC de sus importes.
      */
-    public static function fromFacturaCliente(FacturaCliente $factura, int $idModelo): self
-    {
+    public static function fromFacturaCliente(
+        FacturaCliente $factura,
+        int $idModelo,
+        ?IGICHelper $helper = null
+    ): self {
         $mf = new self();
         $mf->idmodelo = $idModelo;
         $mf->tipofactura = 'cliente';
@@ -154,18 +158,18 @@ class DeclaracionIGICFactura extends ModelClass
         $mf->fecha = $factura->fecha;
         $mf->cifnif = $factura->cifnif;
         $mf->nombre = $factura->nombrecliente;
-        $mf->neto = $factura->neto;
-        $mf->totaligic = $factura->totaliva;
-        $mf->totalrecargo = $factura->totalrecargo;
-        $mf->incluida = true;
+        $mf->setTotalesIGIC(($helper ?? new IGICHelper())->totalesIGICFactura($factura));
         return $mf;
     }
 
     /**
-     * Crea un registro desde una factura de proveedor.
+     * Crea un registro desde una factura de proveedor con la parte de IGIC de sus importes.
      */
-    public static function fromFacturaProveedor(FacturaProveedor $factura, int $idModelo): self
-    {
+    public static function fromFacturaProveedor(
+        FacturaProveedor $factura,
+        int $idModelo,
+        ?IGICHelper $helper = null
+    ): self {
         $mf = new self();
         $mf->idmodelo = $idModelo;
         $mf->tipofactura = 'proveedor';
@@ -174,11 +178,19 @@ class DeclaracionIGICFactura extends ModelClass
         $mf->fecha = $factura->fecha;
         $mf->cifnif = $factura->cifnif;
         $mf->nombre = $factura->nombre;
-        $mf->neto = $factura->neto;
-        $mf->totaligic = $factura->totaliva;
-        $mf->totalrecargo = $factura->totalrecargo;
-        $mf->incluida = true;
+        $mf->setTotalesIGIC(($helper ?? new IGICHelper())->totalesIGICFactura($factura));
         return $mf;
+    }
+
+    /**
+     * Guarda solo la parte de IGIC de la factura; sin líneas de IGIC queda como no incluida.
+     */
+    private function setTotalesIGIC(array $totales): void
+    {
+        $this->neto = $totales['neto'];
+        $this->totaligic = $totales['totaliva'];
+        $this->totalrecargo = $totales['totalrecargo'];
+        $this->incluida = false === empty($totales['neto']) || false === empty($totales['totaliva']);
     }
 
     public function test(): bool

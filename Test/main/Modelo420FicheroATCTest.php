@@ -75,6 +75,7 @@ final class Modelo420FicheroATCTest extends TestCase
         // con los datos se descarga el fichero
         $this->request('POST', EjemplosFicheroATC::SUJETO + [
             'proceso' => 'descargar-atc', 'multireqtoken' => $this->formToken(), 'fpa' => '1',
+            'iban' => 'ES9121000418450200051332',
         ], $id);
         $contenido = $this->runController(new Modelo420('Modelo420', '/Modelo420'));
         $this->assertStringContainsString('.atc"', $this->ultimaRespuesta->headers->get('Content-Disposition'));
@@ -97,6 +98,11 @@ final class Modelo420FicheroATCTest extends TestCase
         $this->assertSame('35016', $controller->datosFichero()['cmu']);
         $this->assertSame('1', $controller->datosFichero()['fpa']);
         $this->assertArrayNotHasKey('c42', $controller->datosFichero());
+
+        // el IBAN no se guarda en la configuración, que no va cifrada
+        $this->assertArrayNotHasKey('iban', $controller->datosFichero());
+        $guardado = (string) Tools::settings('modelosigic', 'fichero-atc-' . Empresas::default()->idempresa, '');
+        $this->assertStringNotContainsString('ES9121000418450200051332', $guardado);
     }
 
     public function testSinTokenNoSeDescarga(): void

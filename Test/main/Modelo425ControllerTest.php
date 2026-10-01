@@ -17,6 +17,7 @@ use FacturaScripts\Core\Where;
 use FacturaScripts\Plugins\ModelosIGIC\Controller\EditDeclaracionIGIC;
 use FacturaScripts\Plugins\ModelosIGIC\Controller\ListDeclaracionIGIC;
 use FacturaScripts\Plugins\ModelosIGIC\Controller\Modelo425;
+use FacturaScripts\Plugins\ModelosIGIC\Lib\IGICHelper;
 use FacturaScripts\Plugins\ModelosIGIC\Lib\RegularizacionIGIC;
 use FacturaScripts\Plugins\ModelosIGIC\Model\DeclaracionIGIC;
 use PHPUnit\Framework\TestCase;
@@ -92,7 +93,7 @@ final class Modelo425ControllerTest extends TestCase
         // marcar como presentado
         $this->request([
             'codejercicio' => $codejercicio, 'proceso' => 'marcar-presentado', 'numeroreferencia' => 'ATC-425',
-            'multireqtoken' => $this->formToken(),
+            'fechapresentacion' => '2091-01-20', 'multireqtoken' => $this->formToken(),
         ]);
         $controller = new Modelo425('Modelo425', '/Modelo425');
         $this->runController($controller);
@@ -178,6 +179,113 @@ final class Modelo425ControllerTest extends TestCase
         $this->assertSame('borrador', DeclaracionIGIC::findWhere([Where::eq('tipo', '425')])->estado);
     }
 
+    public function testGuardarSinPermiso(): void
+    {
+        $this->makeTrimestre();
+        $codejercicio = $this->ejercicio()->codejercicio;
+        $this->request([
+            'codejercicio' => $codejercicio, 'proceso' => 'guardar', 'multireqtoken' => $this->formToken(),
+        ]);
+        $this->runController($this->controladorSoloLectura());
+
+        $this->assertSame(0, $this->contar425($codejercicio));
+    }
+
+    public function testMarcarPresentadoSinPermiso(): void
+    {
+        $this->makeTrimestre();
+        $codejercicio = $this->ejercicio()->codejercicio;
+        $this->request([
+            'codejercicio' => $codejercicio, 'proceso' => 'guardar', 'multireqtoken' => $this->formToken(),
+        ]);
+        $this->runController(new Modelo425('Modelo425', '/Modelo425'));
+
+        $this->request([
+            'codejercicio' => $codejercicio, 'proceso' => 'marcar-presentado', 'fechapresentacion' => '2091-01-20',
+            'multireqtoken' => $this->formToken(),
+        ]);
+        $this->runController($this->controladorSoloLectura());
+
+        $this->assertSame('borrador', DeclaracionIGIC::findWhere([Where::eq('tipo', '425')])->estado);
+    }
+
+    public function testLasFacturasSeLeenUnaVezPorCarga(): void
+    {
+        $this->makeTrimestre();
+        $this->request(['codejercicio' => $this->ejercicio()->codejercicio]);
+        $helper = new class () extends IGICHelper {
+            public int $lecturas = 0;
+
+            protected function facturasCliente(string $fechaInicio, string $fechaFin, ?int $idempresa): array
+            {
+                $this->lecturas++;
+                return parent::facturasCliente($fechaInicio, $fechaFin, $idempresa);
+            }
+
+            protected function facturasProveedor(string $fechaInicio, string $fechaFin, ?int $idempresa): array
+            {
+                $this->lecturas++;
+                return parent::facturasProveedor($fechaInicio, $fechaFin, $idempresa);
+            }
+        };
+        $controller = new class ('Modelo425', '/Modelo425') extends Modelo425 {
+            public IGICHelper $helperPruebas;
+
+            protected function nuevoHelper(): IGICHelper
+            {
+                return $this->helperPruebas;
+            }
+        };
+        $controller->helperPruebas = $helper;
+        $this->runController($controller);
+
+        $this->assertSame(2, $helper->lecturas);
+    }
+
+    public function testEditarNoCambiaElEstado(): void
+    {
+        $this->makeTrimestre();
+        $regiva = (new RegularizacionIGIC())->guardar($this->ejercicio(), '2090-01-01', '2090-03-31', 'T1');
+        $declaracion = RegularizacionIGIC::getDeclaracion((int) $regiva->idregiva);
+        $this->assertTrue($declaracion->marcarPresentado('REF-1', '2090-04-15'));
+
+        // devolverla a borrador desde la ficha permitiría borrar una declaración presentada
+        // el formulario envía todos los campos, también los de solo lectura
+        $this->request(array_merge($declaracion->toArray(), [
+            'action' => 'edit', 'code' => $declaracion->idmodelo, 'estado' => 'borrador',
+            'numeroreferencia' => 'REF-2', 'fechapresentacion' => '2090-04-16',
+        ]), ['code' => $declaracion->idmodelo]);
+        $controller = new class ('EditDeclaracionIGIC') extends EditDeclaracionIGIC {
+            // la semilla del token del núcleo cambia en cada ejecución
+            public function validateFormToken(): bool
+            {
+                return true;
+            }
+        };
+        $this->runController($controller);
+
+        $this->assertTrue($declaracion->reload());
+        $this->assertSame('presentado', $declaracion->estado);
+        $this->assertSame('REF-2', $declaracion->numeroreferencia, $this->recentLog());
+    }
+
+    public function testSoloLecturaNoMuestraLasAcciones(): void
+    {
+        $this->makeTrimestre();
+        $codejercicio = $this->ejercicio()->codejercicio;
+        $this->request(['codejercicio' => $codejercicio]);
+        $html = $this->runController($this->controladorSoloLectura());
+        $this->assertStringNotContainsString('name="proceso" value="guardar"', $html);
+
+        $this->request([
+            'codejercicio' => $codejercicio, 'proceso' => 'guardar', 'multireqtoken' => $this->formToken(),
+        ]);
+        $this->runController(new Modelo425('Modelo425', '/Modelo425'));
+        $this->request(['codejercicio' => $codejercicio]);
+        $html = $this->runController($this->controladorSoloLectura());
+        $this->assertStringNotContainsString('data-bs-target="#modalMarcarPresentado425"', $html);
+    }
+
     public function testListadoDeDeclaraciones(): void
     {
         $controller = new ListDeclaracionIGIC('ListDeclaracionIGIC');
@@ -225,6 +333,20 @@ final class Modelo425ControllerTest extends TestCase
     private function contar425(string $codejercicio): int
     {
         return DeclaracionIGIC::count([Where::eq('tipo', '425'), Where::eq('codejercicio', $codejercicio)]);
+    }
+
+    /**
+     * Controlador de un usuario con permiso de solo lectura.
+     */
+    private function controladorSoloLectura(): Modelo425
+    {
+        return new class ('Modelo425', '/Modelo425') extends Modelo425 {
+            protected function execAction(string $action): void
+            {
+                $this->allowUpdate = false;
+                parent::execAction($action);
+            }
+        };
     }
 
     private function request(array $data, array $query = []): void

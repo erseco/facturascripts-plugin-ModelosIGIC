@@ -12,13 +12,18 @@
 
 namespace FacturaScripts\Test\Plugins;
 
+use FacturaScripts\Core\Base\MiniLog;
 use FacturaScripts\Core\Tools;
 use FacturaScripts\Core\Where;
+use FacturaScripts\Dinamic\Model\Asiento;
 use FacturaScripts\Dinamic\Model\RegularizacionImpuesto;
 use FacturaScripts\Plugins\ModelosIGIC\Controller\Modelo420;
+use FacturaScripts\Plugins\ModelosIGIC\Lib\IGICHelper;
 use FacturaScripts\Plugins\ModelosIGIC\Lib\RegularizacionIGIC;
 use FacturaScripts\Plugins\ModelosIGIC\Model\DeclaracionIGIC;
 use PHPUnit\Framework\TestCase;
+use Twig\Environment;
+use Twig\Loader\ArrayLoader;
 
 /**
  * Flujo completo de la pantalla del Modelo 420.
@@ -271,6 +276,191 @@ final class Modelo420ControllerTest extends TestCase
         $this->assertSame((int) $regiva->idregiva, (int) $controller->selectedRegiva->idregiva);
     }
 
+    public function testGuardarSinPermiso(): void
+    {
+        $this->makeTrimestre();
+        $this->post([
+            'proceso' => 'guardar', 'periodo' => 'T1', 'desde' => '2090-01-01', 'hasta' => '2090-03-31',
+            'multireqtoken' => $this->formToken(),
+        ]);
+        $this->runController($this->controladorSoloLectura());
+
+        $this->assertSame(0, $this->contarRegularizaciones());
+    }
+
+    public function testMarcarPresentadoSinPermiso(): void
+    {
+        $this->makeTrimestre();
+        $regiva = (new RegularizacionIGIC())->guardar($this->ejercicio(), '2090-01-01', '2090-03-31', 'T1');
+
+        $this->post([
+            'proceso' => 'marcar-presentado', 'fechapresentacion' => '2090-04-15',
+            'multireqtoken' => $this->formToken(),
+        ], ['id' => $regiva->idregiva]);
+        $this->runController($this->controladorSoloLectura());
+
+        $this->assertSame('borrador', RegularizacionIGIC::getDeclaracion((int) $regiva->idregiva)->estado);
+    }
+
+    public function testCrearRectificativoSinPermiso(): void
+    {
+        $this->makeTrimestre();
+        $regiva = (new RegularizacionIGIC())->guardar($this->ejercicio(), '2090-01-01', '2090-03-31', 'T1');
+        RegularizacionIGIC::getDeclaracion((int) $regiva->idregiva)->marcarPresentado('REF-1', '2090-04-15');
+
+        $this->post(
+            ['proceso' => 'crear-rectificativo', 'multireqtoken' => $this->formToken()],
+            ['id' => $regiva->idregiva]
+        );
+        $this->runController($this->controladorSoloLectura());
+
+        $declaracion = RegularizacionIGIC::getDeclaracion((int) $regiva->idregiva);
+        $this->assertFalse($declaracion->esRectificativo());
+        $this->assertSame('presentado', $declaracion->estado);
+    }
+
+    public function testDescargarFicheroSinPermiso(): void
+    {
+        $this->makeTrimestre();
+        $regiva = (new RegularizacionIGIC())->guardar($this->ejercicio(), '2090-01-01', '2090-03-31', 'T1');
+
+        $this->post(['proceso' => 'descargar-atc', 'multireqtoken' => $this->formToken()], ['id' => $regiva->idregiva]);
+        MiniLog::clear();
+        $this->runController($this->controladorSoloLectura());
+
+        $this->assertStringContainsString(Tools::lang()->trans('not-allowed-modify'), $this->recentLog());
+        $this->assertStringNotContainsString(
+            Tools::lang()->trans('fichero-atc-ejercicio-no-soportado'),
+            $this->recentLog()
+        );
+    }
+
+    public function testRegularizacionDeOtraEmpresaNoSeCarga(): void
+    {
+        $this->makeTrimestre();
+        $regiva = (new RegularizacionIGIC())->guardar($this->ejercicio(), '2090-01-01', '2090-03-31', 'T1');
+
+        $this->post(['proceso' => 'eliminar', 'multireqtoken' => $this->formToken()], ['id' => $regiva->idregiva]);
+        $controller = new class ('Modelo420', '/Modelo420') extends Modelo420 {
+            protected function loadRegiva(int $id): void
+            {
+                // el usuario trabaja con otra empresa
+                $this->empresa = clone $this->empresa;
+                $this->empresa->idempresa = (int) $this->empresa->idempresa + 1000;
+                parent::loadRegiva($id);
+            }
+        };
+        $this->runController($controller);
+
+        $this->assertNull($controller->selectedRegiva);
+        $this->assertNull($controller->declaracion);
+        $this->assertSame(1, $this->contarRegularizaciones());
+    }
+
+    public function testAvisaSiLaContabilidadNoCuadraConLasFacturas(): void
+    {
+        $this->makeTrimestre();
+        $this->makeAsientoManualIGIC('15-02-' . static::$year, 10.0);
+
+        // en la previsualización
+        $this->post(['proceso' => 'comprobar', 'periodo' => 'T1', 'desde' => '2090-01-01', 'hasta' => '2090-03-31']);
+        MiniLog::clear();
+        $this->runController(new Modelo420('Modelo420', '/Modelo420'));
+        $this->assertStringContainsString(Tools::lang()->trans('descuadre-contable-facturas', [
+            '%diferencia%' => Tools::money(10.0),
+        ]), $this->recentLog());
+
+        // y en la regularización guardada
+        $regiva = (new RegularizacionIGIC())->guardar($this->ejercicio(), '2090-01-01', '2090-03-31', 'T1');
+        $this->get(['id' => $regiva->idregiva]);
+        $controller = new Modelo420('Modelo420', '/Modelo420');
+        $html = $this->runController($controller);
+        $this->assertEqualsWithDelta(10.0, $controller->diferenciaContable(), 0.001);
+        $this->assertStringContainsString('alertDescuadreContable', $html);
+    }
+
+    public function testSinDescuadreNoAvisa(): void
+    {
+        $this->makeTrimestre();
+        $regiva = (new RegularizacionIGIC())->guardar($this->ejercicio(), '2090-01-01', '2090-03-31', 'T1');
+
+        $this->get(['id' => $regiva->idregiva]);
+        $controller = new Modelo420('Modelo420', '/Modelo420');
+        $html = $this->runController($controller);
+
+        $this->assertEqualsWithDelta(0.0, $controller->diferenciaContable(), 0.001);
+        $this->assertStringNotContainsString('alertDescuadreContable', $html);
+    }
+
+    public function testLasFacturasSeLeenUnaVezPorCarga(): void
+    {
+        $this->makeTrimestre();
+        $regiva = (new RegularizacionIGIC())->guardar($this->ejercicio(), '2090-01-01', '2090-03-31', 'T1');
+
+        $this->get(['id' => $regiva->idregiva]);
+        $helper = new class () extends IGICHelper {
+            public int $lecturas = 0;
+
+            protected function facturasCliente(string $fechaInicio, string $fechaFin, ?int $idempresa): array
+            {
+                $this->lecturas++;
+                return parent::facturasCliente($fechaInicio, $fechaFin, $idempresa);
+            }
+
+            protected function facturasProveedor(string $fechaInicio, string $fechaFin, ?int $idempresa): array
+            {
+                $this->lecturas++;
+                return parent::facturasProveedor($fechaInicio, $fechaFin, $idempresa);
+            }
+        };
+        $controller = new class ('Modelo420', '/Modelo420') extends Modelo420 {
+            public IGICHelper $helperPruebas;
+
+            protected function nuevoHelper(): IGICHelper
+            {
+                return $this->helperPruebas;
+            }
+        };
+        $controller->helperPruebas = $helper;
+        $this->runController($controller);
+
+        // una lectura de las ventas y otra de las compras
+        $this->assertSame(2, $helper->lecturas);
+    }
+
+    public function testConfirmacionesEscapadasParaJavaScript(): void
+    {
+        $this->makeTrimestre();
+        $regiva = (new RegularizacionIGIC())->guardar($this->ejercicio(), '2090-01-01', '2090-03-31', 'T1');
+
+        $this->get(['id' => $regiva->idregiva]);
+        $html = $this->runController(new Modelo420('Modelo420', '/Modelo420'));
+
+        $twig = new Environment(new ArrayLoader(['js' => "{{ texto|e('js') }}"]));
+        foreach (['confirmar-actualizar', 'confirmar-eliminar'] as $clave) {
+            $texto = $twig->render('js', ['texto' => Tools::lang()->trans($clave)]);
+            $this->assertStringContainsString("confirm('" . $texto . "')", $html, $clave);
+        }
+    }
+
+    public function testSoloLecturaNoMuestraLasAcciones(): void
+    {
+        $this->makeTrimestre();
+        $regiva = (new RegularizacionIGIC())->guardar($this->ejercicio(), '2090-01-01', '2090-03-31', 'T1');
+
+        $this->get([]);
+        $html = $this->runController($this->controladorSoloLectura());
+        $this->assertStringNotContainsString('onclick="guardarRegiva()"', $html);
+
+        $this->get(['id' => $regiva->idregiva]);
+        $html = $this->runController($this->controladorSoloLectura());
+        $this->assertStringNotContainsString('data-bs-target="#modalMarcarPresentado"', $html);
+
+        RegularizacionIGIC::getDeclaracion((int) $regiva->idregiva)->marcarPresentado('REF-1', '2090-04-15');
+        $html = $this->runController($this->controladorSoloLectura());
+        $this->assertStringNotContainsString('data-bs-target="#modalCrearRectificativo"', $html);
+    }
+
     public function testRegularizacionInexistente(): void
     {
         $this->get(['id' => 999999]);
@@ -326,6 +516,44 @@ final class Modelo420ControllerTest extends TestCase
         $this->runController($controller);
 
         $this->assertSame('borrador', RegularizacionIGIC::getDeclaracion((int) $regiva->idregiva)->estado);
+    }
+
+    /**
+     * Controlador de un usuario con permiso de solo lectura.
+     */
+    private function controladorSoloLectura(): Modelo420
+    {
+        return new class ('Modelo420', '/Modelo420') extends Modelo420 {
+            protected function execAction(string $action): bool
+            {
+                $this->allowDelete = false;
+                $this->allowUpdate = false;
+                return parent::execAction($action);
+            }
+        };
+    }
+
+    /**
+     * Asiento manual que lleva IGIC repercutido a la subcuenta sin pasar por ninguna factura.
+     */
+    private function makeAsientoManualIGIC(string $fecha, float $importe): void
+    {
+        $ejercicio = $this->ejercicio();
+        $helper = new IGICHelper();
+        $asiento = new Asiento();
+        $asiento->idempresa = $ejercicio->idempresa;
+        $asiento->codejercicio = $ejercicio->codejercicio;
+        $asiento->concepto = 'Ajuste manual de IGIC';
+        $asiento->fecha = $fecha;
+        $this->assertTrue($asiento->save());
+        $this->fixtures[] = $asiento;
+
+        $haber = $asiento->getNewLine($helper->getSubcuentaEspecial('IVAREP', $ejercicio->codejercicio));
+        $haber->haber = $importe;
+        $this->assertTrue($haber->save());
+        $debe = $asiento->getNewLine($helper->getSubcuentaEspecial('CAJA', $ejercicio->codejercicio));
+        $debe->debe = $importe;
+        $this->assertTrue($debe->save());
     }
 
     private function contarRegularizaciones(): int

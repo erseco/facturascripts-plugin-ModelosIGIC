@@ -85,11 +85,11 @@ class Modelo420 extends Controller
     /** @var ?array */
     private ?array $casillas = null;
 
-    /** @var array */
-    private array $desgloseCompras = [];
+    /** @var ?array Análisis de las compras del período, calculado una sola vez por carga */
+    private ?array $analisisCompras = null;
 
-    /** @var array */
-    private array $desgloseVentas = [];
+    /** @var ?array Análisis de las ventas del período, calculado una sola vez por carga */
+    private ?array $analisisVentas = null;
 
     public function getPageData(): array
     {
@@ -107,7 +107,7 @@ class Modelo420 extends Controller
 
         $this->allowDelete = (bool) $this->permissions->allowDelete;
         $this->allowUpdate = (bool) $this->permissions->allowUpdate;
-        $this->helper = new IGICHelper();
+        $this->helper = $this->nuevoHelper();
         $this->regiva = new RegularizacionImpuesto();
 
         $this->setPeriodo();
@@ -230,15 +230,7 @@ class Modelo420 extends Controller
      */
     public function excluidasCompras(): array
     {
-        if ($this->selectedRegiva === null) {
-            return [];
-        }
-
-        return $this->helper->excluidasCompras(
-            $this->selectedRegiva->fechainicio,
-            $this->selectedRegiva->fechafin,
-            (int) $this->selectedRegiva->idempresa
-        );
+        return $this->analisisCompras()['excluidas'];
     }
 
     /**
@@ -246,15 +238,7 @@ class Modelo420 extends Controller
      */
     public function excluidasVentas(): array
     {
-        if ($this->selectedRegiva === null) {
-            return [];
-        }
-
-        return $this->helper->excluidasVentas(
-            $this->selectedRegiva->fechainicio,
-            $this->selectedRegiva->fechafin,
-            (int) $this->selectedRegiva->idempresa
-        );
+        return $this->analisisVentas()['excluidas'];
     }
 
     /**
@@ -276,14 +260,7 @@ class Modelo420 extends Controller
      */
     public function desgloseIGICCompras(): array
     {
-        if (empty($this->desgloseCompras) && $this->selectedRegiva !== null) {
-            $this->desgloseCompras = $this->helper->desgloseIGICCompras(
-                $this->selectedRegiva->fechainicio,
-                $this->selectedRegiva->fechafin,
-                (int) $this->selectedRegiva->idempresa
-            );
-        }
-        return $this->desgloseCompras;
+        return $this->analisisCompras()['igic'];
     }
 
     /**
@@ -291,14 +268,27 @@ class Modelo420 extends Controller
      */
     public function desgloseIGICVentas(): array
     {
-        if (empty($this->desgloseVentas) && $this->selectedRegiva !== null) {
-            $this->desgloseVentas = $this->helper->desgloseIGICVentas(
-                $this->selectedRegiva->fechainicio,
-                $this->selectedRegiva->fechafin,
-                (int) $this->selectedRegiva->idempresa
-            );
+        return $this->analisisVentas()['igic'];
+    }
+
+    /**
+     * Diferencia entre el resultado contable que regulariza el asiento y el de las facturas que
+     * declara el modelo. Distinta de cero si hay asientos manuales en las subcuentas de IGIC.
+     */
+    public function diferenciaContable(): float
+    {
+        if ($this->selectedRegiva === null) {
+            return 0.0;
         }
-        return $this->desgloseVentas;
+
+        $contable = $this->helper->resultadoContable(
+            $this->selectedRegiva->fechainicio,
+            $this->selectedRegiva->fechafin,
+            $this->selectedRegiva->codejercicio,
+            empty($this->selectedRegiva->idasiento) ? null : (int) $this->selectedRegiva->idasiento
+        );
+
+        return Tools::round($contable - ($this->totalDevengado() - $this->totalDeducible()));
     }
 
     /**
@@ -348,11 +338,6 @@ class Modelo420 extends Controller
      */
     protected function actualizarRegiva(): void
     {
-        if (false === $this->allowUpdate) {
-            Tools::log()->warning('not-allowed-modify');
-            return;
-        }
-
         $eje = $this->getEjercicioByFecha((string) $this->selectedRegiva->fechainicio);
         if (null === $eje) {
             Tools::log()->error('ejercicio-cerrado');
@@ -393,6 +378,16 @@ class Modelo420 extends Controller
 
         if (empty($this->auxRegiva)) {
             Tools::log()->warning('sin-datos-regularizacion');
+            return;
+        }
+
+        $ventas = $this->helper->desgloseIGICVentas($this->fechaDesde, $this->fechaHasta, $idempresa);
+        $compras = $this->helper->desgloseIGICCompras($this->fechaDesde, $this->fechaHasta, $idempresa);
+        $facturas = $this->helper->calcularTotalDevengado($ventas) - $this->helper->calcularTotalDeducible($compras);
+        $contable = $this->helper->resultadoContable($this->fechaDesde, $this->fechaHasta, $eje->codejercicio);
+        $diferencia = Tools::round($contable - $facturas);
+        if (false === Tools::floatCmp($diferencia, 0.0, 2)) {
+            Tools::log()->warning('descuadre-contable-facturas', ['%diferencia%' => Tools::money($diferencia)]);
         }
     }
 
@@ -459,6 +454,7 @@ class Modelo420 extends Controller
             Tools::log()->notice('regularizacion-eliminada');
             $this->selectedRegiva = null;
             $this->declaracion = null;
+            $this->analisisCompras = $this->analisisVentas = $this->casillas = null;
         }
     }
 
@@ -474,6 +470,12 @@ class Modelo420 extends Controller
 
         $acciones = ['guardar', 'actualizar', 'eliminar', 'marcar-presentado', 'crear-rectificativo', 'descargar-atc'];
         if (false === in_array($action, $acciones, true) || false === $this->validateFormToken()) {
+            return true;
+        }
+
+        // todas estas acciones escriben datos: eliminar exige además el permiso de borrado
+        if (false === $this->allowUpdate) {
+            Tools::log()->warning('not-allowed-modify');
             return true;
         }
 
@@ -516,12 +518,14 @@ class Modelo420 extends Controller
     }
 
     /**
-     * Guarda los datos identificativos y de pago de la empresa para el siguiente trimestre.
+     * Guarda los datos identificativos y la forma de pago de la empresa para el siguiente trimestre.
+     *
+     * El IBAN no se guarda: la configuración no va cifrada y se pide en cada presentación.
      */
     protected function guardarDatosFichero(): void
     {
         $guardar = array_intersect_key($this->datosATC, array_flip(
-            ['nif', 'nrs', 'svp', 'nvp', 'npk', 'esc', 'pis', 'pue', 'pop', 'cmu', 'cp', 'tel', 'fpa', 'iban']
+            ['nif', 'nrs', 'svp', 'nvp', 'npk', 'esc', 'pis', 'pue', 'pop', 'cmu', 'cp', 'tel', 'fpa']
         ));
         Tools::settingsSet('modelosigic', $this->claveDatosFichero(), json_encode($guardar));
         Tools::settingsSave();
@@ -566,16 +570,20 @@ class Modelo420 extends Controller
         $this->loadRegiva((int) $regiva->idregiva);
     }
 
+    /**
+     * Carga una regularización de la empresa activa.
+     */
     protected function loadRegiva(int $id): void
     {
         $regiva = new RegularizacionImpuesto();
-        if (false === $regiva->load($id)) {
+        if (false === $regiva->load($id) || $regiva->idempresa != $this->empresa->idempresa) {
             Tools::log()->warning('regularizacion-no-encontrada');
             return;
         }
 
         $this->selectedRegiva = $regiva;
         $this->declaracion = RegularizacionIGIC::getDeclaracion($id);
+        $this->analisisCompras = $this->analisisVentas = $this->casillas = null;
     }
 
     /**
@@ -617,5 +625,38 @@ class Modelo420 extends Controller
         }
 
         Tools::log()->error('error-marcar-presentado');
+    }
+
+    protected function nuevoHelper(): IGICHelper
+    {
+        return new IGICHelper();
+    }
+
+    private function analisisCompras(): array
+    {
+        if (null === $this->analisisCompras) {
+            $this->analisisCompras = $this->selectedRegiva === null ? ['igic' => [], 'excluidas' => []] :
+                $this->helper->analisisCompras(
+                    $this->selectedRegiva->fechainicio,
+                    $this->selectedRegiva->fechafin,
+                    (int) $this->selectedRegiva->idempresa
+                );
+        }
+
+        return $this->analisisCompras;
+    }
+
+    private function analisisVentas(): array
+    {
+        if (null === $this->analisisVentas) {
+            $this->analisisVentas = $this->selectedRegiva === null ? ['igic' => [], 'excluidas' => []] :
+                $this->helper->analisisVentas(
+                    $this->selectedRegiva->fechainicio,
+                    $this->selectedRegiva->fechafin,
+                    (int) $this->selectedRegiva->idempresa
+                );
+        }
+
+        return $this->analisisVentas;
     }
 }

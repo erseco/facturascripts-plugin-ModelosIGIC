@@ -41,7 +41,30 @@ class EditDeclaracionIGIC extends EditController
             return $this->downloadATC();
         }
 
+        if ($action === 'edit') {
+            $this->conservarCamposNoEditables();
+        }
+
         return parent::execPreviousAction($action);
+    }
+
+    /**
+     * En la ficha solo se editan el número de referencia y la fecha de presentación. El estado,
+     * el período y los importes los gestionan las acciones del Modelo 420 y del 425: devolver a
+     * borrador una declaración presentada permitiría borrarla.
+     */
+    protected function conservarCamposNoEditables(): void
+    {
+        $modelo = new DeclaracionIGIC();
+        if (false === $modelo->load($this->request->queryOrInput('code', ''))) {
+            return;
+        }
+
+        foreach ($modelo->toArray() as $campo => $valor) {
+            if (false === in_array($campo, ['numeroreferencia', 'fechapresentacion'], true)) {
+                $this->request->request->set($campo, $valor);
+            }
+        }
     }
 
     /**
