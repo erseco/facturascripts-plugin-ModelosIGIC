@@ -15,7 +15,7 @@
                 <p class="text-muted mb-0">{{ i18n.trans('modelo-425-descripcion') }}</p>
             </div>
             <div class="col-sm-6 text-end">
-                {% if fsc.selectedEjercicio and fsc.declaracion is null %}
+                {% if fsc.allowUpdate and fsc.selectedEjercicio and fsc.declaracion is null %}
                     <form action="{{ fsc.url() }}" method="post" class="d-inline">
                         {{ formToken() }}
                         <input type="hidden" name="proceso" value="guardar">
@@ -98,7 +98,7 @@
                                         {% endif %}
                                     </div>
                                     <div class="col-md-6 text-end">
-                                        {% if fsc.declaracion.estado == 'borrador' %}
+                                        {% if fsc.allowUpdate and fsc.declaracion.estado == 'borrador' %}
                                             <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#modalMarcarPresentado425">
                                                 <i class="fa-solid fa-check fa-fw"></i> {{ i18n.trans('marcar-presentado') }}
                                             </button>

@@ -245,6 +245,7 @@ régimen aplicable. Además, todavía no hay programa del 425 para 2026 (pendien
 | `IGICHelper::FECHA_TIPO_ESPECIFICO` | 01/01/2026 | Ley 9/2025, disposición final novena |
 | `IGICHelper::PERIODOS_420`, `Modelo420::setPeriodo()` | Solo trimestres naturales | RG art. 57.5; ficha ATC del 420 |
 | `IGICHelper::plazoPresentacion()` | 1–20 del mes siguiente; 4T y 425 durante enero | RG arts. 57.6 y 57.8 |
+| `DeclaracionIGIC::testFechaPresentacion()` | La presentación es posterior al final del período | RG art. 57.6 (el plazo empieza el mes siguiente) |
 | `IGICHelper::wherePeriodo()` | Imputación por fecha de devengo | Ley 20/1991 art. 18; instrucciones del 420, apartados 7 y 9 |
 | `IGICHelper::analizar()`, `esLineaIGIC()` | Solo líneas de IGIC sin causa de exención | Instrucciones del 420, apartado 7 (casillas 01–18) |
 | `IGICHelper::calcularTotalDevengado()`, `calcularTotalDeducible()` | Sin recargo | TR IGIC art. 70.Uno.a |

@@ -182,6 +182,22 @@ final class RegularizacionIGICTest extends TestCase
         $this->assertSame(1, $this->contarRegularizaciones());
     }
 
+    public function testEliminarConRectificativaEnBorradorNoSePermite(): void
+    {
+        $this->makeTrimestre();
+        $servicio = new RegularizacionIGIC();
+        $regiva = $servicio->guardar($this->ejercicio(), '2090-01-01', '2090-03-31', 'T1');
+        $original = RegularizacionIGIC::getDeclaracion((int) $regiva->idregiva);
+        $this->assertTrue($original->marcarPresentado('REF-1', '2090-04-15'));
+        $this->assertNotNull($original->crearRectificativo());
+
+        // la última declaración es la rectificativa en borrador, pero el original ya se presentó
+        $this->assertFalse($servicio->eliminar($regiva));
+        $this->assertSame(1, $this->contarRegularizaciones());
+        $this->assertTrue($original->reload());
+        $this->assertCount(1, $original->getModelosRectificativos());
+    }
+
     public function testEliminarConFalloDeshaceElBorrado(): void
     {
         $this->makeTrimestre();

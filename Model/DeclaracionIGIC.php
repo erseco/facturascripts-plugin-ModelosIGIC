@@ -40,6 +40,9 @@ class DeclaracionIGIC extends ModelClass
 {
     use ModelTrait;
 
+    /** Estados de una declaración: solo cambian con las acciones del plugin */
+    public const ESTADOS = ['borrador', 'presentado', 'rectificado'];
+
     /** @var int */
     public $idmodelo;
 
@@ -224,10 +227,16 @@ class DeclaracionIGIC extends ModelClass
      */
     public function marcarPresentado(?string $numeroReferencia = null, ?string $fechaPresentacion = null): bool
     {
+        $anterior = [$this->estado, $this->numeroreferencia, $this->fechapresentacion];
         $this->estado = 'presentado';
         $this->numeroreferencia = $numeroReferencia;
         $this->fechapresentacion = $fechaPresentacion ?? date('Y-m-d');
-        return $this->save();
+        if ($this->save()) {
+            return true;
+        }
+
+        [$this->estado, $this->numeroreferencia, $this->fechapresentacion] = $anterior;
+        return false;
     }
 
     /**
@@ -314,15 +323,18 @@ class DeclaracionIGIC extends ModelClass
     {
         // mismo criterio de período que el cálculo del modelo (fecha de devengo o, si no hay, fecha)
         $where = IGICHelper::wherePeriodo($this->fechainicio, $this->fechafin, $idempresa);
+        $helper = new IGICHelper();
 
         foreach (FacturaCliente::all($where, ['fecha' => 'ASC', 'idfactura' => 'ASC']) as $factura) {
-            if (false === DeclaracionIGICFactura::fromFacturaCliente($factura, (int) $this->idmodelo)->save()) {
+            $registro = DeclaracionIGICFactura::fromFacturaCliente($factura, (int) $this->idmodelo, $helper);
+            if (false === $registro->save()) {
                 return false;
             }
         }
 
         foreach (FacturaProveedor::all($where, ['fecha' => 'ASC', 'idfactura' => 'ASC']) as $factura) {
-            if (false === DeclaracionIGICFactura::fromFacturaProveedor($factura, (int) $this->idmodelo)->save()) {
+            $registro = DeclaracionIGICFactura::fromFacturaProveedor($factura, (int) $this->idmodelo, $helper);
+            if (false === $registro->save()) {
                 return false;
             }
         }
@@ -388,6 +400,29 @@ class DeclaracionIGIC extends ModelClass
         return $nuevo;
     }
 
+    /**
+     * La declaración se presenta una vez terminado el período (Decreto 268/2011, art. 57.6).
+     */
+    protected function testFechaPresentacion(): bool
+    {
+        if (empty($this->fechapresentacion)) {
+            return true;
+        }
+
+        $fecha = strtotime((string) $this->fechapresentacion);
+        if (false === $fecha) {
+            Tools::log()->error('fecha-presentacion-invalida');
+            return false;
+        }
+
+        if (false === empty($this->fechafin) && $fecha <= strtotime((string) $this->fechafin)) {
+            Tools::log()->error('fecha-presentacion-anterior-fin-periodo');
+            return false;
+        }
+
+        return true;
+    }
+
     public function test(): bool
     {
         $this->tipo = Tools::noHtml($this->tipo);
@@ -395,6 +430,10 @@ class DeclaracionIGIC extends ModelClass
         $this->codejercicio = Tools::noHtml($this->codejercicio);
         $this->estado = Tools::noHtml($this->estado);
         $this->numeroreferencia = Tools::noHtml($this->numeroreferencia ?? '');
+
+        // los formularios envían 0 en los campos numéricos vacíos
+        $this->idregiva = empty($this->idregiva) ? null : (int) $this->idregiva;
+        $this->idrectifica = empty($this->idrectifica) ? null : (int) $this->idrectifica;
 
         if (empty($this->tipo) || !in_array($this->tipo, ['420', '425'])) {
             Tools::log()->error('tipo-modelo-invalido');
@@ -411,7 +450,12 @@ class DeclaracionIGIC extends ModelClass
             return false;
         }
 
-        return parent::test();
+        if (false === in_array($this->estado, self::ESTADOS, true)) {
+            Tools::log()->error('estado-declaracion-invalido');
+            return false;
+        }
+
+        return $this->testFechaPresentacion() && parent::test();
     }
 
     public function url(string $type = 'auto', string $list = 'ListDeclaracionIGIC'): string

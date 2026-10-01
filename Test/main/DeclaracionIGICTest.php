@@ -13,6 +13,7 @@
 namespace FacturaScripts\Test\Plugins;
 
 use FacturaScripts\Core\DataSrc\Empresas;
+use FacturaScripts\Core\Lib\OperacionIVA;
 use FacturaScripts\Plugins\ModelosIGIC\Model\DeclaracionIGIC;
 use FacturaScripts\Plugins\ModelosIGIC\Model\DeclaracionIGICFactura;
 use PHPUnit\Framework\TestCase;
@@ -105,7 +106,7 @@ final class DeclaracionIGICTest extends TestCase
     public function testRectificativoConFalloDeshaceTodo(): void
     {
         $declaracion = $this->makeDeclaracion();
-        $this->assertTrue($declaracion->marcarPresentado());
+        $this->assertTrue($declaracion->marcarPresentado(null, '2090-04-15'));
 
         // una factura inválida hace fallar la copia
         $factura = new DeclaracionIGICFactura();
@@ -120,6 +121,60 @@ final class DeclaracionIGICTest extends TestCase
         $this->assertTrue($declaracion->reload());
         $this->assertSame('presentado', $declaracion->estado);
         $this->assertSame([], $declaracion->getModelosRectificativos());
+    }
+
+    public function testEstadoSoloAdmiteLosValoresConocidos(): void
+    {
+        $declaracion = $this->makeDeclaracion();
+
+        $declaracion->estado = 'aprobado';
+        $this->assertFalse($declaracion->test());
+
+        foreach (['borrador', 'presentado', 'rectificado'] as $estado) {
+            $declaracion->estado = $estado;
+            $this->assertTrue($declaracion->test(), $estado);
+        }
+    }
+
+    public function testFechaPresentacionDebeSerValidaYPosteriorAlPeriodo(): void
+    {
+        $declaracion = $this->makeDeclaracion();
+
+        $declaracion->fechapresentacion = 'no es una fecha';
+        $this->assertFalse($declaracion->test());
+
+        // no se puede presentar antes de que termine el período (Decreto 268/2011, art. 57.6)
+        $declaracion->fechapresentacion = '2090-03-31';
+        $this->assertFalse($declaracion->test());
+        $this->assertFalse($declaracion->marcarPresentado('REF', '2090-02-15'));
+
+        $declaracion->fechapresentacion = '01-04-2090';
+        $this->assertTrue($declaracion->test());
+        $this->assertTrue($declaracion->marcarPresentado('REF', '2090-04-20'));
+    }
+
+    public function testFacturaRegistraSoloLaParteDeIGIC(): void
+    {
+        $this->ejercicio();
+        $venta = $this->makeFacturaClienteLineas('10-02-' . static::$year, [
+            ['base' => 100.0, 'tipo' => 7.0],
+            ['base' => 50.0, 'tipo' => 21.0, 'operacion' => OperacionIVA::ES_OPERATION_01],
+        ]);
+        $compra = $this->makeFacturaProveedorLineas('11-02-' . static::$year, [
+            ['base' => 50.0, 'tipo' => 21.0, 'operacion' => OperacionIVA::ES_OPERATION_01],
+        ]);
+        $declaracion = $this->makeDeclaracion();
+
+        $linea = DeclaracionIGICFactura::fromFacturaCliente($venta, (int) $declaracion->idmodelo);
+        $this->assertEqualsWithDelta(100.0, $linea->neto, 0.001);
+        $this->assertEqualsWithDelta(7.0, $linea->totaligic, 0.001);
+        $this->assertTrue($linea->incluida);
+
+        // sin líneas de IGIC: se registra como no incluida
+        $linea = DeclaracionIGICFactura::fromFacturaProveedor($compra, (int) $declaracion->idmodelo);
+        $this->assertEqualsWithDelta(0.0, $linea->neto, 0.001);
+        $this->assertEqualsWithDelta(0.0, $linea->totaligic, 0.001);
+        $this->assertFalse($linea->incluida);
     }
 
     public function testFacturaDesdeFacturas(): void

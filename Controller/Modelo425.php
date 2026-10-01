@@ -48,17 +48,20 @@ class Modelo425 extends Controller
     /** @var IGICHelper */
     protected IGICHelper $helper;
 
+    /** @var bool */
+    public bool $allowUpdate = false;
+
     /** @var ?Ejercicio */
     public ?Ejercicio $selectedEjercicio = null;
 
     /** @var ?array */
     private ?array $casillas = null;
 
-    /** @var array */
-    private array $desgloseCompras = [];
+    /** @var ?array Análisis de las compras del período, calculado una sola vez por carga */
+    private ?array $analisisCompras = null;
 
-    /** @var array */
-    private array $desgloseVentas = [];
+    /** @var ?array Análisis de las ventas del período, calculado una sola vez por carga */
+    private ?array $analisisVentas = null;
 
     /** @var ?DeclaracionIGIC */
     public ?DeclaracionIGIC $declaracion = null;
@@ -77,7 +80,8 @@ class Modelo425 extends Controller
     {
         parent::run();
 
-        $this->helper = new IGICHelper();
+        $this->allowUpdate = (bool) $this->permissions->allowUpdate;
+        $this->helper = $this->nuevoHelper();
         $this->ejercicio = new Ejercicio();
 
         // ejercicio seleccionado o el de la fecha actual
@@ -90,16 +94,30 @@ class Modelo425 extends Controller
             $this->declaracion = $this->getDeclaracionIGICPorEjercicio($this->selectedEjercicio->codejercicio);
         }
 
-        $action = $this->request()->input('proceso', '');
-        if (in_array($action, ['guardar', 'marcar-presentado'], true) && $this->validateFormToken()) {
-            if ($action === 'guardar' && $this->selectedEjercicio) {
-                $this->guardarModelo425();
-            } elseif ($action === 'marcar-presentado' && $this->declaracion) {
-                $this->marcarPresentado();
-            }
+        $this->execAction($this->request()->input('proceso', ''));
+        $this->view('Modelo425.html.twig');
+    }
+
+    /**
+     * Ejecuta la acción solicitada.
+     */
+    protected function execAction(string $action): void
+    {
+        $acciones = ['guardar', 'marcar-presentado'];
+        if (false === in_array($action, $acciones, true) || false === $this->validateFormToken()) {
+            return;
         }
 
-        $this->view('Modelo425.html.twig');
+        if (false === $this->allowUpdate) {
+            Tools::log()->warning('not-allowed-modify');
+            return;
+        }
+
+        if ($action === 'guardar' && $this->selectedEjercicio) {
+            $this->guardarModelo425();
+        } elseif ($action === 'marcar-presentado' && $this->declaracion) {
+            $this->marcarPresentado();
+        }
     }
 
     /**
@@ -152,15 +170,7 @@ class Modelo425 extends Controller
      */
     public function excluidasCompras(): array
     {
-        if ($this->selectedEjercicio === null) {
-            return [];
-        }
-
-        return $this->helper->excluidasCompras(
-            $this->selectedEjercicio->fechainicio,
-            $this->selectedEjercicio->fechafin,
-            (int) $this->selectedEjercicio->idempresa
-        );
+        return $this->analisisCompras()['excluidas'];
     }
 
     /**
@@ -168,15 +178,7 @@ class Modelo425 extends Controller
      */
     public function excluidasVentas(): array
     {
-        if ($this->selectedEjercicio === null) {
-            return [];
-        }
-
-        return $this->helper->excluidasVentas(
-            $this->selectedEjercicio->fechainicio,
-            $this->selectedEjercicio->fechafin,
-            (int) $this->selectedEjercicio->idempresa
-        );
+        return $this->analisisVentas()['excluidas'];
     }
 
     /**
@@ -199,14 +201,7 @@ class Modelo425 extends Controller
      */
     public function desgloseIGICCompras(): array
     {
-        if (empty($this->desgloseCompras) && $this->selectedEjercicio !== null) {
-            $this->desgloseCompras = $this->helper->desgloseIGICCompras(
-                $this->selectedEjercicio->fechainicio,
-                $this->selectedEjercicio->fechafin,
-                (int) $this->selectedEjercicio->idempresa
-            );
-        }
-        return $this->desgloseCompras;
+        return $this->analisisCompras()['igic'];
     }
 
     /**
@@ -214,14 +209,7 @@ class Modelo425 extends Controller
      */
     public function desgloseIGICVentas(): array
     {
-        if (empty($this->desgloseVentas) && $this->selectedEjercicio !== null) {
-            $this->desgloseVentas = $this->helper->desgloseIGICVentas(
-                $this->selectedEjercicio->fechainicio,
-                $this->selectedEjercicio->fechafin,
-                (int) $this->selectedEjercicio->idempresa
-            );
-        }
-        return $this->desgloseVentas;
+        return $this->analisisVentas()['igic'];
     }
 
     /**
@@ -381,5 +369,38 @@ class Modelo425 extends Controller
         $ejercicio = new Ejercicio();
         $ejercicio->idempresa = $this->empresa->idempresa;
         return $ejercicio->loadFromDate($fecha, false, false) ? $ejercicio : null;
+    }
+
+    protected function nuevoHelper(): IGICHelper
+    {
+        return new IGICHelper();
+    }
+
+    private function analisisCompras(): array
+    {
+        if (null === $this->analisisCompras) {
+            $this->analisisCompras = $this->selectedEjercicio === null ? ['igic' => [], 'excluidas' => []] :
+                $this->helper->analisisCompras(
+                    $this->selectedEjercicio->fechainicio,
+                    $this->selectedEjercicio->fechafin,
+                    (int) $this->selectedEjercicio->idempresa
+                );
+        }
+
+        return $this->analisisCompras;
+    }
+
+    private function analisisVentas(): array
+    {
+        if (null === $this->analisisVentas) {
+            $this->analisisVentas = $this->selectedEjercicio === null ? ['igic' => [], 'excluidas' => []] :
+                $this->helper->analisisVentas(
+                    $this->selectedEjercicio->fechainicio,
+                    $this->selectedEjercicio->fechafin,
+                    (int) $this->selectedEjercicio->idempresa
+                );
+        }
+
+        return $this->analisisVentas;
     }
 }

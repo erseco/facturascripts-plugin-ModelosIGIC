@@ -140,15 +140,19 @@ class RegularizacionIGIC
 
     /**
      * Elimina una regularización, su asiento y su declaración en borrador.
+     *
+     * No se elimina si alguna de sus declaraciones se ha presentado, aunque la última sea una
+     * rectificativa en borrador: el original quedaría apuntando a un asiento que ya no existe.
      */
     public function eliminar(RegularizacionImpuesto $regiva): bool
     {
-        $declaracion = static::getDeclaracion((int) $regiva->idregiva);
-        if ($declaracion !== null && $declaracion->estado !== 'borrador') {
+        $where = [Where::eq('idregiva', $regiva->idregiva), Where::notEq('estado', 'borrador')];
+        if (DeclaracionIGIC::count($where) > 0) {
             Tools::log()->warning('declaracion-no-eliminable');
             return false;
         }
 
+        $declaracion = static::getDeclaracion((int) $regiva->idregiva);
         $newTransaction = false === $this->db->inTransaction() && $this->db->beginTransaction();
         try {
             $eliminado = $this->eliminarTodo($regiva, $declaracion);

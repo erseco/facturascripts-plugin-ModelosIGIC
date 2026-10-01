@@ -86,7 +86,7 @@ class IGICHelper
      */
     public function desgloseIGICCompras(string $fechaInicio, string $fechaFin, ?int $idempresa = null): array
     {
-        return $this->analizar($this->facturasProveedor($fechaInicio, $fechaFin, $idempresa))['igic'];
+        return $this->analisisCompras($fechaInicio, $fechaFin, $idempresa)['igic'];
     }
 
     /**
@@ -94,7 +94,17 @@ class IGICHelper
      */
     public function excluidasCompras(string $fechaInicio, string $fechaFin, ?int $idempresa = null): array
     {
-        return $this->analizar($this->facturasProveedor($fechaInicio, $fechaFin, $idempresa))['excluidas'];
+        return $this->analisisCompras($fechaInicio, $fechaFin, $idempresa)['excluidas'];
+    }
+
+    /**
+     * Desglose del IGIC y líneas excluidas de las compras del período, con una sola lectura.
+     *
+     * @return array{igic: array, excluidas: array}
+     */
+    public function analisisCompras(string $fechaInicio, string $fechaFin, ?int $idempresa = null): array
+    {
+        return $this->analizar($this->facturasProveedor($fechaInicio, $fechaFin, $idempresa));
     }
 
     /**
@@ -108,7 +118,7 @@ class IGICHelper
      */
     public function desgloseIGICVentas(string $fechaInicio, string $fechaFin, ?int $idempresa = null): array
     {
-        return $this->analizar($this->facturasCliente($fechaInicio, $fechaFin, $idempresa))['igic'];
+        return $this->analisisVentas($fechaInicio, $fechaFin, $idempresa)['igic'];
     }
 
     /**
@@ -116,7 +126,33 @@ class IGICHelper
      */
     public function excluidasVentas(string $fechaInicio, string $fechaFin, ?int $idempresa = null): array
     {
-        return $this->analizar($this->facturasCliente($fechaInicio, $fechaFin, $idempresa))['excluidas'];
+        return $this->analisisVentas($fechaInicio, $fechaFin, $idempresa)['excluidas'];
+    }
+
+    /**
+     * Desglose del IGIC y líneas excluidas de las ventas del período, con una sola lectura.
+     *
+     * @return array{igic: array, excluidas: array}
+     */
+    public function analisisVentas(string $fechaInicio, string $fechaFin, ?int $idempresa = null): array
+    {
+        return $this->analizar($this->facturasCliente($fechaInicio, $fechaFin, $idempresa));
+    }
+
+    /**
+     * Base, cuota y recargo de las líneas de IGIC de una factura, sin las del resto de impuestos.
+     *
+     * @return array{neto: float, totaliva: float, totalrecargo: float}
+     */
+    public function totalesIGICFactura(BusinessDocument $factura): array
+    {
+        $desglose = $this->analizar([$factura])['igic'];
+
+        return [
+            'neto' => $this->sumar($desglose, 'neto'),
+            'totaliva' => $this->sumar($desglose, 'totaliva'),
+            'totalrecargo' => $this->sumar($desglose, 'totalrecargo'),
+        ];
     }
 
     /**
@@ -459,6 +495,35 @@ class IGICHelper
     }
 
     /**
+     * Resultado del período según la contabilidad: IGIC repercutido menos soportado de las
+     * subcuentas especiales, que es lo que regulariza el asiento.
+     *
+     * El modelo y el fichero toman los importes de las facturas; si hay asientos manuales en esas
+     * subcuentas, los dos resultados no coinciden.
+     */
+    public function resultadoContable(
+        string $fechaInicio,
+        string $fechaFin,
+        string $codEjercicio,
+        ?int $excluirAsiento = null
+    ): float {
+        $resultado = 0.0;
+        foreach (['IVAREP', 'IVASOP'] as $codCuentaEsp) {
+            foreach ($this->getSubcuentasEspeciales($codCuentaEsp, $codEjercicio) as $subcuenta) {
+                $totales = $this->getTotalesSubcuenta(
+                    $subcuenta->idsubcuenta,
+                    $fechaInicio,
+                    $fechaFin,
+                    $excluirAsiento
+                );
+                $resultado += $totales['haber'] - $totales['debe'];
+            }
+        }
+
+        return Tools::round($resultado);
+    }
+
+    /**
      * Obtiene las subcuentas asociadas a una cuenta especial.
      *
      * @param string $codCuentaEsp Código de la cuenta especial (IVASOP, IVAREP, etc.)
@@ -504,14 +569,19 @@ class IGICHelper
     /**
      * Obtiene los totales de una subcuenta para un rango de fechas.
      *
-     * @param int    $idsubcuenta ID de la subcuenta
-     * @param string $fechaInicio Fecha de inicio
-     * @param string $fechaFin    Fecha de fin
+     * @param int    $idsubcuenta    ID de la subcuenta
+     * @param string $fechaInicio    Fecha de inicio
+     * @param string $fechaFin       Fecha de fin
+     * @param ?int   $excluirAsiento Asiento que no se suma (el de la propia regularización)
      *
      * @return array Array con 'debe', 'haber' y 'saldo'
      */
-    public function getTotalesSubcuenta(int $idsubcuenta, string $fechaInicio, string $fechaFin): array
-    {
+    public function getTotalesSubcuenta(
+        int $idsubcuenta,
+        string $fechaInicio,
+        string $fechaFin,
+        ?int $excluirAsiento = null
+    ): array {
         $result = ['debe' => 0.0, 'haber' => 0.0, 'saldo' => 0.0];
 
         $sql = 'SELECT COALESCE(SUM(debe), 0) as debe, COALESCE(SUM(haber), 0) as haber'
@@ -520,6 +590,9 @@ class IGICHelper
             . ' WHERE p.idsubcuenta = ' . (int) $idsubcuenta
             . ' AND a.fecha >= ' . $this->db->var2str($fechaInicio)
             . ' AND a.fecha <= ' . $this->db->var2str($fechaFin);
+        if (null !== $excluirAsiento) {
+            $sql .= ' AND a.idasiento <> ' . $excluirAsiento;
+        }
 
         $data = $this->db->select($sql);
         if ($data) {

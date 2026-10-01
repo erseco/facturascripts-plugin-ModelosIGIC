@@ -48,6 +48,8 @@
 /codecov.yml export-ignore
 /coverage.xml export-ignore
 
-# Normative reference documents (PDFs, NORMATIVA.md)
-/doc/                   export-ignore
+# Normative reference documents: the code cites NORMATIVA.md and VALIDAR_FICHERO_ATC.md, so they ship
+/doc/**                 export-ignore
+/doc/NORMATIVA.md       -export-ignore
+/doc/VALIDAR_FICHERO_ATC.md -export-ignore
 /docs/                  export-ignore

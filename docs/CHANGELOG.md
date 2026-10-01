@@ -6,6 +6,31 @@ la primera versión publicada es la `1.0` (etiqueta `1.0`).
 
 ## [Unreleased]
 
+### Security
+
+- Las acciones que escriben datos (guardar, actualizar, eliminar, marcar como presentado, crear rectificativo y
+  descargar el fichero) comprueban el permiso de modificación del usuario en los modelos 420 y 425; la vista ya no
+  muestra sus botones a quien no lo tiene.
+- El Modelo 420 solo abre las regularizaciones de la empresa activa.
+- El IBAN ya no se guarda en la configuración, que no va cifrada; al actualizar se borra el que hubiera guardado.
+- Los textos de las confirmaciones se escapan para JavaScript.
+
+### Fixed
+
+- No se puede eliminar una regularización si alguna de sus declaraciones se ha presentado, aunque la última sea una
+  rectificativa en borrador.
+- Las facturas de cada declaración guardan solo la base y la cuota de IGIC; las que no tienen IGIC quedan como no
+  incluidas.
+- La ficha de la declaración solo modifica el número de referencia y la fecha de presentación (antes se podía
+  escribir cualquier estado y fallaba al guardar las declaraciones que no son rectificativas).
+- La fecha de presentación debe ser válida y posterior al final del período (Decreto 268/2011, art. 57.6).
+- Las facturas del período se leen una sola vez por carga de la página.
+- `doc/NORMATIVA.md` y `doc/VALIDAR_FICHERO_ATC.md`, citados en el código, se incluyen en el paquete.
+
+### Added
+
+- Aviso cuando el resultado de las subcuentas de IGIC no coincide con el de las facturas (asientos manuales).
+
 ## [1.0] - 2026-09-29
 
 ### Added

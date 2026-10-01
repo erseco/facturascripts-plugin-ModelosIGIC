@@ -21,7 +21,9 @@
 
 namespace FacturaScripts\Plugins\ModelosIGIC;
 
+use FacturaScripts\Core\DataSrc\Empresas;
 use FacturaScripts\Core\Template\InitClass;
+use FacturaScripts\Core\Tools;
 
 /**
  * Plugin para la generación de los Modelos 420 y 425 de la Agencia Tributaria Canaria.
@@ -40,11 +42,32 @@ final class Init extends InitClass
 
     public function update(): void
     {
-        // Migraciones y actualizaciones futuras
+        $this->borrarIbanGuardado();
     }
 
     public function uninstall(): void
     {
         // Limpieza al desinstalar
+    }
+
+    /**
+     * Las versiones anteriores guardaban el IBAN en la configuración, que no va cifrada.
+     */
+    private function borrarIbanGuardado(): void
+    {
+        $cambios = false;
+        foreach (Empresas::all() as $empresa) {
+            $clave = 'fichero-atc-' . $empresa->idempresa;
+            $datos = json_decode((string) Tools::settings('modelosigic', $clave, ''), true);
+            if (is_array($datos) && array_key_exists('iban', $datos)) {
+                unset($datos['iban']);
+                Tools::settingsSet('modelosigic', $clave, json_encode($datos));
+                $cambios = true;
+            }
+        }
+
+        if ($cambios) {
+            Tools::settingsSave();
+        }
     }
 }

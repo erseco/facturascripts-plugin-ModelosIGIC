@@ -23,7 +23,7 @@
                     <a href="{{ fsc.url() }}" class="btn btn-outline-secondary">
                         <i class="fa-solid fa-arrow-left fa-fw"></i> {{ i18n.trans('volver') }}
                     </a>
-                    {% if fsc.ficheroATCDisponible() %}
+                    {% if fsc.allowUpdate and fsc.ficheroATCDisponible() %}
                         <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalFicheroATC">
                             <i class="fa-solid fa-download fa-fw"></i> {{ i18n.trans('descargar-atc') }}
                             <span class="badge bg-warning text-dark">{{ i18n.trans('experimental') }}</span>
@@ -32,7 +32,7 @@
                     {% set borrador = fsc.declaracion is null or fsc.declaracion.estado == 'borrador' %}
                     {% if fsc.allowUpdate and borrador %}
                         <form action="{{ fsc.url() }}?id={{ fsc.selectedRegiva.idregiva }}" method="post" class="d-inline"
-                              onsubmit="return confirm('{{ i18n.trans('confirmar-actualizar') }}');">
+                              onsubmit="return confirm('{{ i18n.trans('confirmar-actualizar')|e('js') }}');">
                             {{ formToken() }}
                             <input type="hidden" name="proceso" value="actualizar">
                             <button type="submit" class="btn btn-warning">
@@ -42,7 +42,7 @@
                     {% endif %}
                     {% if fsc.allowDelete and borrador %}
                         <form action="{{ fsc.url() }}?id={{ fsc.selectedRegiva.idregiva }}" method="post" class="d-inline"
-                              onsubmit="return confirm('{{ i18n.trans('confirmar-eliminar') }}');">
+                              onsubmit="return confirm('{{ i18n.trans('confirmar-eliminar')|e('js') }}');">
                             {{ formToken() }}
                             <input type="hidden" name="proceso" value="eliminar">
                             <button type="submit" class="btn btn-danger">
@@ -64,6 +64,13 @@
             {% if fsc.periodoAbierto() and (fsc.declaracion is null or fsc.declaracion.estado == 'borrador') %}
                 <div class="alert alert-warning">
                     <i class="fa-solid fa-triangle-exclamation fa-fw"></i> {{ i18n.trans('periodo-no-terminado') }}
+                </div>
+            {% endif %}
+            {% set diferenciaContable = fsc.diferenciaContable() %}
+            {% if diferenciaContable != 0 %}
+                <div id="alertDescuadreContable" class="alert alert-warning">
+                    <i class="fa-solid fa-scale-unbalanced fa-fw"></i>
+                    {{ i18n.trans('descuadre-contable-facturas', {'%diferencia%': money(diferenciaContable)}) }}
                 </div>
             {% endif %}
             <div class="row">
@@ -199,7 +206,8 @@
                                     </p>
                                 {% endif %}
                             </div>
-                            {% if fsc.declaracion.estado == 'borrador' %}
+                            {% if not fsc.allowUpdate %}
+                            {% elseif fsc.declaracion.estado == 'borrador' %}
                                 <div class="card-footer">
                                     <button type="button" class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#modalMarcarPresentado">
                                         <i class="fa-solid fa-check fa-fw"></i> {{ i18n.trans('marcar-presentado') }}
@@ -488,9 +496,11 @@
                                 <i class="fa-solid fa-calculator fa-fw"></i> {{ i18n.trans('calcular') }}
                             </button>
                         {% else %}
-                            <button type="button" class="btn btn-success" onclick="guardarRegiva()">
-                                <i class="fa-solid fa-save fa-fw"></i> {{ i18n.trans('guardar') }}
-                            </button>
+                            {% if fsc.allowUpdate %}
+                                <button type="button" class="btn btn-success" onclick="guardarRegiva()">
+                                    <i class="fa-solid fa-save fa-fw"></i> {{ i18n.trans('guardar') }}
+                                </button>
+                            {% endif %}
                         {% endif %}
                     </div>
                 </form>

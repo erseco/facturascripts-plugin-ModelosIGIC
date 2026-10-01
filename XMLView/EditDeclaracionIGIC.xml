@@ -15,7 +15,7 @@
                 <widget type="text" fieldname="codejercicio" readonly="true" />
             </column>
             <column name="estado" numcolumns="2" order="50">
-                <widget type="text" fieldname="estado" />
+                <widget type="text" fieldname="estado" readonly="true" />
             </column>
             <column name="numero-referencia-atc" numcolumns="4" order="60">
                 <widget type="text" fieldname="numeroreferencia" />
