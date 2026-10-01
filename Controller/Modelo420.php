@@ -29,6 +29,7 @@ use FacturaScripts\Dinamic\Model\Partida;
 use FacturaScripts\Dinamic\Model\RegularizacionImpuesto;
 use FacturaScripts\Plugins\ModelosIGIC\Lib\ATCFileGenerator;
 use FacturaScripts\Plugins\ModelosIGIC\Lib\CasillasModelo420;
+use FacturaScripts\Plugins\ModelosIGIC\Lib\ComparativaIGIC;
 use FacturaScripts\Plugins\ModelosIGIC\Lib\IGICHelper;
 use FacturaScripts\Plugins\ModelosIGIC\Lib\ListasATC;
 use FacturaScripts\Plugins\ModelosIGIC\Lib\RegularizacionIGIC;
@@ -207,6 +208,30 @@ class Modelo420 extends Controller
     public function tipoResultado(float $resultado): string
     {
         return (new CasillasModelo420($this->helper))->tipoResultado($resultado);
+    }
+
+    /**
+     * Returns the historical Model 420 comparison for the current company.
+     */
+    public function comparativaHistorica(): array
+    {
+        [$desde, $hasta] = $this->rangoComparativa();
+        $declaraciones = array_filter(
+            DeclaracionIGIC::all([Where::eq('tipo', '420')], ['fechainicio' => 'ASC']),
+            fn (DeclaracionIGIC $declaracion): bool => $declaracion->getIdEmpresa() === (int) $this->empresa->idempresa
+        );
+
+        return ComparativaIGIC::modelo420($declaraciones, $desde, $hasta);
+    }
+
+    public function comparativaDesde(): int
+    {
+        return $this->rangoComparativa()[0];
+    }
+
+    public function comparativaHasta(): int
+    {
+        return $this->rangoComparativa()[1];
     }
 
     /**
@@ -494,6 +519,18 @@ class Modelo420 extends Controller
         }
 
         return true;
+    }
+
+    /**
+     * Returns the normalized year range requested for the comparison.
+     */
+    protected function rangoComparativa(): array
+    {
+        $actual = (int) date('Y');
+        $desde = (int) $this->request()->inputOrQuery('comparar_desde', $actual - 4);
+        $hasta = (int) $this->request()->inputOrQuery('comparar_hasta', $actual);
+
+        return $desde <= $hasta ? [$desde, $hasta] : [$hasta, $desde];
     }
 
     protected function claveDatosFichero(): string
