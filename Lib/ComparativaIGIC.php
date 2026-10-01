@@ -27,7 +27,10 @@ final class ComparativaIGIC
         $rows = [];
 
         foreach ($declaraciones as $declaracion) {
-            if ($declaracion->tipo !== '420' || false === in_array($declaracion->periodo, IGICHelper::PERIODOS_420, true)) {
+            if (
+                $declaracion->tipo !== '420'
+                || false === in_array($declaracion->periodo, IGICHelper::PERIODOS_420, true)
+            ) {
                 continue;
             }
 
