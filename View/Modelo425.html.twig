@@ -160,6 +160,59 @@
                         </div>
                     {% endif %}
 
+                    {% set comparativa = fsc.comparativaHistorica() %}
+                    <div class="card mb-4 d-print-none">
+                        <div class="card-header">
+                            <i class="fa-solid fa-chart-line fa-fw"></i> {{ i18n.trans('comparativa-historica') }}
+                        </div>
+                        <div class="card-body">
+                            <form action="{{ fsc.url() }}" method="get" class="row g-2 align-items-end mb-3">
+                                <input type="hidden" name="codejercicio" value="{{ fsc.selectedEjercicio.codejercicio }}">
+                                <div class="col-sm-3">
+                                    <label for="compararDesde425" class="form-label">{{ i18n.trans('desde-ejercicio') }}</label>
+                                    <input type="number" id="compararDesde425" name="comparar_desde" class="form-control"
+                                           value="{{ fsc.comparativaDesde() }}" min="2000" max="2999">
+                                </div>
+                                <div class="col-sm-3">
+                                    <label for="compararHasta425" class="form-label">{{ i18n.trans('hasta-ejercicio') }}</label>
+                                    <input type="number" id="compararHasta425" name="comparar_hasta" class="form-control"
+                                           value="{{ fsc.comparativaHasta() }}" min="2000" max="2999">
+                                </div>
+                                <div class="col-sm-3">
+                                    <button type="submit" class="btn btn-outline-primary">
+                                        <i class="fa-solid fa-filter fa-fw"></i> {{ i18n.trans('comparar') }}
+                                    </button>
+                                </div>
+                            </form>
+                            <div class="table-responsive">
+                                <table class="table table-sm table-hover mb-0">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>{{ i18n.trans('ejercicio') }}</th>
+                                            <th class="text-end">{{ i18n.trans('total-devengado') }}</th>
+                                            <th class="text-end">{{ i18n.trans('total-deducible') }}</th>
+                                            <th class="text-end">{{ i18n.trans('resultado') }}</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for row in comparativa %}
+                                            <tr>
+                                                <th>{{ row.ejercicio }}</th>
+                                                <td class="text-end">{{ money(row.totaldevengado) }}</td>
+                                                <td class="text-end">{{ money(row.totaldeducible) }}</td>
+                                                <td class="text-end">{{ money(row.resultado) }}</td>
+                                            </tr>
+                                        {% else %}
+                                            <tr>
+                                                <td colspan="4" class="text-muted text-center">{{ i18n.trans('sin-datos-comparativa') }}</td>
+                                            </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
                     {# Información adicional #}
                     <div class="card mb-4 d-print-none">
                         <div class="card-header">
