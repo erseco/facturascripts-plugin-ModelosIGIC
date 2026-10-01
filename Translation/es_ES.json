@@ -275,5 +275,10 @@
     "fichero-atc-demasiados-tipos": "Fichero: hay más tipos de IGIC que filas tiene el modelo en el programa de ayuda de ese ejercicio.",
     "fichero-atc-tipo-no-admitido": "Fichero: hay un tipo de IGIC que no figura en la lista de tipos del programa de ayuda de ese ejercicio.",
     "fichero-atc-devolucion-solo-4t": "Fichero: la devolución solo se puede solicitar en el cuarto trimestre.",
-    "fichero-atc-no-valido": "El fichero no tiene el formato del programa de ayuda."
+    "fichero-atc-no-valido": "El fichero no tiene el formato del programa de ayuda.",
+    "comparativa-historica": "Comparativa histórica",
+    "desde-ejercicio": "Desde ejercicio",
+    "hasta-ejercicio": "Hasta ejercicio",
+    "comparar": "Comparar",
+    "sin-datos-comparativa": "No hay declaraciones guardadas en el rango seleccionado."
 }
