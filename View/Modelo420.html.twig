@@ -390,6 +390,9 @@
                                         <td>
                                             {% if decl %}
                                                 <span class="badge bg-{{ decl.estadoClase() }}">{{ decl.estadoDescripcion() }}</span>
+                                                {% if decl.esRectificativo() %}
+                                                    <span class="badge bg-info">{{ i18n.trans('modelo-rectificativo') }}</span>
+                                                {% endif %}
                                             {% endif %}
                                         </td>
                                         <td class="text-end">{{ reg.fechaasiento }}</td>

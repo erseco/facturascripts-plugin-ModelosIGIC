@@ -280,5 +280,9 @@
     "desde-ejercicio": "Desde ejercicio",
     "hasta-ejercicio": "Hasta ejercicio",
     "comparar": "Comparar",
-    "sin-datos-comparativa": "No hay declaraciones guardadas en el rango seleccionado."
+    "sin-datos-comparativa": "No hay declaraciones guardadas en el rango seleccionado.",
+    "modelo-425-no-borrador": "Solo se puede actualizar o eliminar un Modelo 425 en borrador.",
+    "modelo-425-eliminado": "Modelo 425 eliminado correctamente.",
+    "confirmar-actualizar-425": "Se eliminará el borrador del Modelo 425 y se volverá a calcular con las facturas actuales del ejercicio. ¿Continuar?",
+    "confirmar-eliminar-425": "¿Está seguro de eliminar este borrador del Modelo 425?"
 }

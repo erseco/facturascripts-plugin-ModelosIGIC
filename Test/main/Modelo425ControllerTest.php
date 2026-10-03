@@ -100,6 +100,112 @@ final class Modelo425ControllerTest extends TestCase
         $this->assertSame('presentado', $controller->declaracion->estado);
     }
 
+    public function testActualizarYEliminarBorrador(): void
+    {
+        $this->makeTrimestre();
+        $codejercicio = $this->ejercicio()->codejercicio;
+        $this->request([
+            'codejercicio' => $codejercicio, 'proceso' => 'guardar', 'multireqtoken' => $this->formToken(),
+        ]);
+        $this->runController(new Modelo425('Modelo425', '/Modelo425'));
+
+        // el borrador ofrece actualizar y eliminar, y el estado sale antes que las casillas (#13)
+        $this->request(['codejercicio' => $codejercicio]);
+        $html = $this->runController(new Modelo425('Modelo425', '/Modelo425'));
+        $this->assertStringContainsString('name="proceso" value="actualizar"', $html);
+        $this->assertStringContainsString('name="proceso" value="eliminar"', $html);
+        $this->assertLessThan(
+            strpos($html, Tools::lang()->trans('casilla-425-74')),
+            strpos($html, Tools::lang()->trans('estado-modelo'))
+        );
+
+        // una factura nueva del ejercicio entra al actualizar
+        $this->makeTrimestre('05');
+        $this->request([
+            'codejercicio' => $codejercicio, 'proceso' => 'actualizar', 'multireqtoken' => $this->formToken(),
+        ]);
+        $controller = new Modelo425('Modelo425', '/Modelo425');
+        $this->runController($controller);
+        $this->assertSame(1, $this->contar425($codejercicio), $this->recentLog());
+        $this->assertEqualsWithDelta(140.0, $controller->declaracion->totaldevengado, 0.001);
+        $this->assertCount(2, $controller->getFacturasClienteModelo());
+
+        // eliminar
+        $this->request([
+            'codejercicio' => $codejercicio, 'proceso' => 'eliminar', 'multireqtoken' => $this->formToken(),
+        ]);
+        $controller = new Modelo425('Modelo425', '/Modelo425');
+        $this->runController($controller);
+        $this->assertNull($controller->declaracion);
+        $this->assertSame(0, $this->contar425($codejercicio));
+    }
+
+    public function testPresentadoNoSeActualizaNiSeElimina(): void
+    {
+        $this->makeTrimestre();
+        $codejercicio = $this->ejercicio()->codejercicio;
+        $this->request([
+            'codejercicio' => $codejercicio, 'proceso' => 'guardar', 'multireqtoken' => $this->formToken(),
+        ]);
+        $this->runController(new Modelo425('Modelo425', '/Modelo425'));
+        $this->assertTrue(DeclaracionIGIC::findWhere([Where::eq('tipo', '425')])->marcarPresentado(null, '2091-01-20'));
+
+        foreach (['actualizar', 'eliminar'] as $proceso) {
+            $this->request([
+                'codejercicio' => $codejercicio, 'proceso' => $proceso, 'multireqtoken' => $this->formToken(),
+            ]);
+            $html = $this->runController(new Modelo425('Modelo425', '/Modelo425'));
+            $this->assertStringNotContainsString('name="proceso" value="' . $proceso . '"', $html);
+        }
+
+        $declaracion = DeclaracionIGIC::findWhere([Where::eq('tipo', '425')]);
+        $this->assertSame('presentado', $declaracion->estado);
+        $this->assertCount(1, $declaracion->getFacturasCliente());
+    }
+
+    public function testRectificadoNoSumaEnLosTrimestrales(): void
+    {
+        $this->makeTrimestre();
+        $regiva = (new RegularizacionIGIC())->guardar($this->ejercicio(), '2090-01-01', '2090-03-31', 'T1');
+        $declaracion = RegularizacionIGIC::getDeclaracion((int) $regiva->idregiva);
+        $this->assertTrue($declaracion->marcarPresentado('REF-1', '2090-04-15'));
+        $this->assertNotNull($declaracion->crearRectificativo());
+
+        $this->request(['codejercicio' => $this->ejercicio()->codejercicio]);
+        $html = $this->runController(new Modelo425('Modelo425', '/Modelo425'));
+
+        $inicio = strpos($html, '<tfoot class="table-secondary">');
+        $pie = substr($html, $inicio, strpos($html, '</tfoot>', $inicio) - $inicio);
+        $this->assertStringContainsString(Tools::money(70.0), $pie);
+        $this->assertStringNotContainsString(Tools::money(140.0), $pie);
+        $this->assertStringContainsString(Tools::lang()->trans('modelo-rectificativo'), $html);
+    }
+
+    public function testEliminarSinPermiso(): void
+    {
+        $this->makeTrimestre();
+        $codejercicio = $this->ejercicio()->codejercicio;
+        $this->request([
+            'codejercicio' => $codejercicio, 'proceso' => 'guardar', 'multireqtoken' => $this->formToken(),
+        ]);
+        $this->runController(new Modelo425('Modelo425', '/Modelo425'));
+
+        $this->request([
+            'codejercicio' => $codejercicio, 'proceso' => 'eliminar', 'multireqtoken' => $this->formToken(),
+        ]);
+        $controller = new class ('Modelo425', '/Modelo425') extends Modelo425 {
+            protected function execAction(string $action): void
+            {
+                $this->allowDelete = false;
+                parent::execAction($action);
+            }
+        };
+        $html = $this->runController($controller);
+
+        $this->assertSame(1, $this->contar425($codejercicio));
+        $this->assertStringNotContainsString('name="proceso" value="eliminar"', $html);
+    }
+
     public function testSinEjercicioSeleccionado(): void
     {
         $this->request(['codejercicio' => 'NOEX']);

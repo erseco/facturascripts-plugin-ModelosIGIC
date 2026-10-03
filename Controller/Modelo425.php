@@ -50,6 +50,9 @@ class Modelo425 extends Controller
     protected IGICHelper $helper;
 
     /** @var bool */
+    public bool $allowDelete = false;
+
+    /** @var bool */
     public bool $allowUpdate = false;
 
     /** @var ?Ejercicio */
@@ -81,6 +84,7 @@ class Modelo425 extends Controller
     {
         parent::run();
 
+        $this->allowDelete = (bool) $this->permissions->allowDelete;
         $this->allowUpdate = (bool) $this->permissions->allowUpdate;
         $this->helper = $this->nuevoHelper();
         $this->ejercicio = new Ejercicio();
@@ -100,9 +104,6 @@ class Modelo425 extends Controller
     }
 
     /**
-     * Ejecuta la acción solicitada.
-     */
-    /**
      * Returns the normalized year range requested for the comparison.
      */
     protected function rangoComparativa(): array
@@ -116,9 +117,12 @@ class Modelo425 extends Controller
         return $desde <= $hasta ? [$desde, $hasta] : [$hasta, $desde];
     }
 
+    /**
+     * Ejecuta la acción solicitada.
+     */
     protected function execAction(string $action): void
     {
-        $acciones = ['guardar', 'marcar-presentado'];
+        $acciones = ['guardar', 'actualizar', 'eliminar', 'marcar-presentado'];
         if (false === in_array($action, $acciones, true) || false === $this->validateFormToken()) {
             return;
         }
@@ -130,8 +134,63 @@ class Modelo425 extends Controller
 
         if ($action === 'guardar' && $this->selectedEjercicio) {
             $this->guardarModelo425();
+        } elseif ($action === 'actualizar' && $this->declaracion) {
+            $this->actualizarModelo425();
+        } elseif ($action === 'eliminar' && $this->declaracion) {
+            $this->eliminarModelo425();
         } elseif ($action === 'marcar-presentado' && $this->declaracion) {
             $this->marcarPresentado();
+        }
+    }
+
+    /**
+     * Vuelve a calcular el borrador con las facturas actuales del ejercicio.
+     */
+    protected function actualizarModelo425(): void
+    {
+        if ($this->declaracion->estado !== 'borrador') {
+            Tools::log()->warning('modelo-425-no-borrador');
+            return;
+        }
+
+        // las tablas no se pueden crear dentro de una transacción
+        new DeclaracionIGICFactura();
+
+        $db = $this->db();
+        $newTransaction = false === $db->inTransaction() && $db->beginTransaction();
+        $anterior = $this->declaracion;
+        $this->declaracion = null;
+        if ($anterior->delete() && $this->guardarModelo425()) {
+            if ($newTransaction) {
+                $db->commit();
+            }
+            return;
+        }
+
+        if ($newTransaction) {
+            $db->rollback();
+        }
+        $this->declaracion = $anterior;
+    }
+
+    /**
+     * Elimina el borrador del ejercicio.
+     */
+    protected function eliminarModelo425(): void
+    {
+        if (false === $this->allowDelete) {
+            Tools::log()->warning('not-allowed-delete');
+            return;
+        }
+
+        if ($this->declaracion->estado !== 'borrador') {
+            Tools::log()->warning('modelo-425-no-borrador');
+            return;
+        }
+
+        if ($this->declaracion->delete()) {
+            Tools::log()->notice('modelo-425-eliminado');
+            $this->declaracion = null;
         }
     }
 
@@ -302,11 +361,11 @@ class Modelo425 extends Controller
     /**
      * Guarda el modelo 425 y las facturas asociadas en una transacción.
      */
-    protected function guardarModelo425(): void
+    protected function guardarModelo425(): bool
     {
         if ($this->declaracion !== null) {
             Tools::log()->warning('modelo-425-ya-existe');
-            return;
+            return false;
         }
 
         $modelo = $this->nuevaDeclaracion();
@@ -331,13 +390,14 @@ class Modelo425 extends Controller
             }
             $this->declaracion = $modelo;
             Tools::log()->notice('modelo-425-guardado');
-            return;
+            return true;
         }
 
         if ($newTransaction) {
             $db->rollback();
         }
         Tools::log()->error('error-guardar-modelo-425');
+        return false;
     }
 
     protected function nuevaDeclaracion(): DeclaracionIGIC

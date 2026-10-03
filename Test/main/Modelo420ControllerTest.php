@@ -146,6 +146,11 @@ final class Modelo420ControllerTest extends TestCase
         $this->runController($controller);
         $this->assertTrue($controller->declaracion->esRectificativo());
 
+        // el listado indica que la regularización tiene un rectificativo en borrador (#13)
+        $this->get([]);
+        $html = $this->runController(new Modelo420('Modelo420', '/Modelo420'));
+        $this->assertStringContainsString(Tools::lang()->trans('modelo-rectificativo'), $html);
+
         // no hay programa de ayuda para el ejercicio de pruebas: no se ofrece el fichero
         $this->assertFalse($controller->ficheroATCDisponible());
         $this->post(['proceso' => 'descargar-atc', 'multireqtoken' => $this->formToken()], ['id' => $idregiva]);
