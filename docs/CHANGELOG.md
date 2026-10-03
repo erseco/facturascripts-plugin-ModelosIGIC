@@ -6,6 +6,8 @@ la primera versión publicada es la `1.0` (etiqueta `1.0`).
 
 ## [Unreleased]
 
+## [1.2] - 2026-10-03
+
 ### Security
 
 - Las acciones que escriben datos (guardar, actualizar, eliminar, marcar como presentado, crear rectificativo y
@@ -26,10 +28,25 @@ la primera versión publicada es la `1.0` (etiqueta `1.0`).
 - La fecha de presentación debe ser válida y posterior al final del período (Decreto 268/2011, art. 57.6).
 - Las facturas del período se leen una sola vez por carga de la página.
 - `doc/NORMATIVA.md` y `doc/VALIDAR_FICHERO_ATC.md`, citados en el código, se incluyen en el paquete.
+- El total de los modelos 420 trimestrales del 425 ya no suma las declaraciones rectificadas (#13).
 
 ### Added
 
 - Aviso cuando el resultado de las subcuentas de IGIC no coincide con el de las facturas (asientos manuales).
+- Comparativa histórica por ejercicios en el Modelo 425 y por trimestres en el Modelo 420 (#12).
+- Modelo 425 en borrador: botones para actualizar los datos y para eliminarlo (#13).
+- El listado del Modelo 420 y los trimestrales del 425 indican los modelos rectificativos (#13).
+
+### Changed
+
+- En el Modelo 425 el estado y los modelos 420 trimestrales se muestran antes que las casillas (#13).
+
+## [1.1] - 2026-09-29
+
+### Added
+
+- Resultado de cada regularización en el listado del Modelo 420 y botón para actualizar las regularizaciones en
+  borrador (#7).
 
 ## [1.0] - 2026-09-29
 
