@@ -25,6 +25,29 @@
                         </button>
                     </form>
                 {% endif %}
+                {% set borrador = fsc.declaracion and fsc.declaracion.estado == 'borrador' %}
+                {% if fsc.allowUpdate and borrador %}
+                    <form action="{{ fsc.url() }}" method="post" class="d-inline"
+                          onsubmit="return confirm('{{ i18n.trans('confirmar-actualizar-425')|e('js') }}');">
+                        {{ formToken() }}
+                        <input type="hidden" name="proceso" value="actualizar">
+                        <input type="hidden" name="codejercicio" value="{{ fsc.selectedEjercicio.codejercicio }}">
+                        <button type="submit" class="btn btn-warning">
+                            <i class="fa-solid fa-rotate fa-fw"></i> {{ i18n.trans('actualizar-datos') }}
+                        </button>
+                    </form>
+                {% endif %}
+                {% if fsc.allowUpdate and fsc.allowDelete and borrador %}
+                    <form action="{{ fsc.url() }}" method="post" class="d-inline"
+                          onsubmit="return confirm('{{ i18n.trans('confirmar-eliminar-425')|e('js') }}');">
+                        {{ formToken() }}
+                        <input type="hidden" name="proceso" value="eliminar">
+                        <input type="hidden" name="codejercicio" value="{{ fsc.selectedEjercicio.codejercicio }}">
+                        <button type="submit" class="btn btn-danger">
+                            <i class="fa-solid fa-trash fa-fw"></i> {{ i18n.trans('eliminar') }}
+                        </button>
+                    </form>
+                {% endif %}
                 <button type="button" class="btn btn-outline-secondary" onclick="window.print()">
                     <i class="fa-solid fa-print fa-fw"></i> {{ i18n.trans('imprimir') }}
                 </button>
@@ -61,14 +84,6 @@
         {% if fsc.selectedEjercicio %}
             <div class="row">
                 <div class="col-lg-12">
-                    {% set casillas = fsc.casillas() %}
-                    {% include 'Block/CasillasIGIC.html.twig' with {
-                        'casillas': casillas,
-                        'modelo': '425',
-                        'excluidasVentas': fsc.excluidasVentas(),
-                        'excluidasCompras': fsc.excluidasCompras()
-                    } %}
-
                     {# Estado del modelo fiscal #}
                     {% if fsc.declaracion %}
                         <div class="card mb-4 d-print-none">
@@ -132,8 +147,11 @@
                                             {% set sumDevengado = 0 %}
                                             {% set sumDeducible = 0 %}
                                             {% for modelo in modelos420 %}
-                                                {% set sumDevengado = sumDevengado + modelo.totaldevengado %}
-                                                {% set sumDeducible = sumDeducible + modelo.totaldeducible %}
+                                                {# la declaración rectificada la sustituye su rectificativo #}
+                                                {% if modelo.estado != 'rectificado' %}
+                                                    {% set sumDevengado = sumDevengado + modelo.totaldevengado %}
+                                                    {% set sumDeducible = sumDeducible + modelo.totaldeducible %}
+                                                {% endif %}
                                                 <tr>
                                                     <td>{{ modelo.periodo }}</td>
                                                     <td class="text-end">{{ money(modelo.totaldevengado) }}</td>
@@ -141,6 +159,9 @@
                                                     <td class="text-end">{{ money(modelo.resultado) }}</td>
                                                     <td class="text-center">
                                                         <span class="badge bg-{{ modelo.estadoClase() }}">{{ modelo.estadoDescripcion() }}</span>
+                                                        {% if modelo.esRectificativo() %}
+                                                            <span class="badge bg-info">{{ i18n.trans('modelo-rectificativo') }}</span>
+                                                        {% endif %}
                                                     </td>
                                                 </tr>
                                             {% endfor %}
@@ -159,6 +180,14 @@
                             </div>
                         </div>
                     {% endif %}
+
+                    {% set casillas = fsc.casillas() %}
+                    {% include 'Block/CasillasIGIC.html.twig' with {
+                        'casillas': casillas,
+                        'modelo': '425',
+                        'excluidasVentas': fsc.excluidasVentas(),
+                        'excluidasCompras': fsc.excluidasCompras()
+                    } %}
 
                     {% set comparativa = fsc.comparativaHistorica() %}
                     <div class="card mb-4 d-print-none">
