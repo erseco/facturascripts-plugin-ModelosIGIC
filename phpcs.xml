@@ -18,6 +18,7 @@
     <exclude-pattern>*/dist/*</exclude-pattern>
     <exclude-pattern>Test/bootstrap.php</exclude-pattern>
     <exclude-pattern>Test/install-plugins.php</exclude-pattern>
+    <exclude-pattern>Test/create-core-tables.php</exclude-pattern>
     <exclude-pattern>Test/check-coverage.php</exclude-pattern>
 
     <!-- Include PSR-12 standard -->
